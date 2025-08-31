@@ -243,6 +243,192 @@ cmake [options] -S <path-to-source> -B <path-to-build>
 
 `ctest cpack`等遇到实际场景再说, 下面我们就以上面的`hello world`, 来演绎一遍完整的流程.
 
+--------
+
+使用`cmake`进行项目构建, 有两种做法, 它们分别叫做"源内构建"和"源外构建"两种, "源"指的是源代码, 内, 外描述的的`cmake`生成的文件是否和源文件混在一起, 其实, 在上面中, 我们用的就是源外构建, 我们在源代码和`CMakeLists.txt`的所在目录中又建立一个名为"build"的目录, 然后, 把`cmake`生成的文件都放在`build`子文件夹中, 实际上, 我们也可以把`build`放到源目录(即源代码和`CMakeLists.txt`所在的目录)之上的目录, 这其实也是一种源外构建.    源内构建则把`cmake`生成的文件和源文件混在一起, 这样不方便进行管理, 而且当想要重新生成一些文件时, 由于这些文件和源文件混在一起, 就容易误删源文件,这不太安全, 项目结构会显得乱糟糟的, 也不方便进行定位查询.
+
+```shell
+[wind@Ubuntu hello_world]$ ls
+build  CMakeLists.txt  main.cpp
+[wind@Ubuntu hello_world]$ cd build
+[wind@Ubuntu build]$ ls
+CMakeCache.txt  CMakeFiles  cmake_install.cmake  hello  Makefile
+[wind@Ubuntu build]$ cd ..
+[wind@Ubuntu hello_world]$ # 把build放上级目录也是源外构建
+[wind@Ubuntu hello_world]$ rm -rf build
+[wind@Ubuntu hello_world]$ ls
+CMakeLists.txt  main.cpp
+[wind@Ubuntu hello_world]$ cd ..
+[wind@Ubuntu cmakeClass]$ mkdir build
+[wind@Ubuntu cmakeClass]$ cd build
+[wind@Ubuntu build]$ cmake ../hello_world
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/build
+[wind@Ubuntu build]$ ls
+CMakeCache.txt  CMakeFiles  cmake_install.cmake  Makefile
+[wind@Ubuntu build]$ make
+[ 50%] Building CXX object CMakeFiles/hello.dir/main.cpp.o
+[100%] Linking CXX executable hello
+[100%] Built target hello
+[wind@Ubuntu build]$ ./hello
+hello world!
+[wind@Ubuntu build]$ cd ..
+[wind@Ubuntu cmakeClass]$ rm -rf build
+[wind@Ubuntu cmakeClass]$ # 拷贝一份新项目做源内构建
+[wind@Ubuntu cmakeClass]$ cp -rf ./hello_world ./hello_world_backup
+[wind@Ubuntu cmakeClass]$ cd hello_world_backup
+[wind@Ubuntu hello_world_backup]$ ls
+CMakeLists.txt  main.cpp
+[wind@Ubuntu hello_world_backup]$ cmake .
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/hello_world_backup
+[wind@Ubuntu hello_world_backup]$ ls
+CMakeCache.txt  CMakeFiles  cmake_install.cmake  CMakeLists.txt  main.cpp  Makefile
+[wind@Ubuntu hello_world_backup]$ make
+[ 50%] Building CXX object CMakeFiles/hello.dir/main.cpp.o
+[100%] Linking CXX executable hello
+[100%] Built target hello
+[wind@Ubuntu hello_world_backup]$ ls
+CMakeCache.txt  CMakeFiles  cmake_install.cmake  CMakeLists.txt  hello  main.cpp  Makefile
+[wind@Ubuntu hello_world_backup]$ cd ..
+[wind@Ubuntu cmakeClass]$ rm -rf hello_world_backup
+[wind@Ubuntu cmakeClass]$
+```
+
+关于源目录和构建目录
+
+```shell
+[wind@Ubuntu cmakeClass]$ cd hello_world
+[wind@Ubuntu hello_world]$ mkdir build && cd build
+[wind@Ubuntu build]$ cmake
+Usage
+
+  cmake [options] <path-to-source>
+  cmake [options] <path-to-existing-build>
+  cmake [options] -S <path-to-source> -B <path-to-build>
+
+Specify a source directory to (re-)generate a build system for it in the
+current working directory.  Specify an existing build directory to
+re-generate its build system.
+
+Run 'cmake --help' for more information.
+
+[wind@Ubuntu build]$ # cmake [options] -S <path-to-source> -B <path-to-build>
+[wind@Ubuntu build]$ # -S 是源文件目录， 即源代码和CMakeLists.txt所在的目录
+[wind@Ubuntu build]$ # -B 是构建目录, 即cmake所生成的哪些构建文件所在的目录
+[wind@Ubuntu build]$ ls
+[wind@Ubuntu build]$ cmake -S .. -B .
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/hello_world/build
+[wind@Ubuntu build]$ 
+```
+
+假如我们对原来的`CMakeLists.txt`进行了略微修改, 现在要重新刷新一下构建目录, 此时我们就可以使用`cmake <path-to-build>`来进行刷新.
+
+```shell
+[wind@Ubuntu build]$ cmake .
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/hello_world/build
+[wind@Ubuntu build]$ # 这里我实际没改, 可能现象略有不同
+[wind@Ubuntu build]$ # 在build目录中, 有一些缓存文件, 比如CMakeCache.txt, 其内部存放着CMakeLists.txt的绝对路径, 因此, 当执行cmake . 时, cmake就可以通过这些缓存文件找到CMakeList.txt, 从而重新读取并刷新
+[wind@Ubuntu build]$ cat CMakeCache.txt | head -306 | tail -3
+//Source directory with the top level CMakeLists.txt file for this
+// project
+CMAKE_HOME_DIRECTORY:INTERNAL=/home/wind/cmakeClass/hello_world
+[wind@Ubuntu build]$ ls /home/wind/cmakeClass/hello_world
+build  CMakeLists.txt  main.cpp
+[wind@Ubuntu build]$ 
+```
+
+在构建文件生成后, 那就要生成二进制目标文件了. 对于二进制目标文件的生成, 有两种方式, 一是`make`, 二是`cmake --build`, 我们更推荐`cmake --build`, 很明显, 它是`cmake`支持的, 所以具有跨平台性.而`make`当然就只能在`Linux`上运行. 另外, `make clean`对应`cmake --build <path-to-build> --target clean`.
+
+```shell
+[wind@Ubuntu build]$ ls
+CMakeCache.txt  CMakeFiles  cmake_install.cmake  Makefile
+[wind@Ubuntu build]$ make
+[ 50%] Building CXX object CMakeFiles/hello.dir/main.cpp.o
+[100%] Linking CXX executable hello
+[100%] Built target hello
+[wind@Ubuntu build]$ ./hello
+hello world!
+[wind@Ubuntu build]$ make clean
+[wind@Ubuntu build]$ ls
+CMakeCache.txt  CMakeFiles  cmake_install.cmake  Makefile
+[wind@Ubuntu build]$ cmake --build .
+[ 50%] Building CXX object CMakeFiles/hello.dir/main.cpp.o
+[100%] Linking CXX executable hello
+[100%] Built target hello
+[wind@Ubuntu build]$ ./hello
+hello world!
+[wind@Ubuntu build]$ cmake --build . --target clean
+[wind@Ubuntu build]$ ls
+CMakeCache.txt  CMakeFiles  cmake_install.cmake  Makefile
+[wind@Ubuntu build]$ 
+```
+
+---
+
+使用`cmake --build`, 会调用各自平台的项目构建工具, 对于`Linux`来说, 使用的就是`make`, 在`cmake`的实际配置中, `cmake`会调用`gmake`, `gamke`是个软链接, 一种虚拟层, 它会依据实际的平台情况, 将`gmake`链接到对应的项目工具中
+
+```shell
+wind@Ubuntu build]$ cat CMakeCache.txt | head -110 | tail -2
+//Path to a program.
+CMAKE_MAKE_PROGRAM:FILEPATH=/usr/bin/gmake
+[wind@Ubuntu build]$ ll /usr/bin/gmake
+lrwxrwxrwx 1 root root 4 Apr  9  2024 /usr/bin/gmake -> make*
+[wind@Ubuntu build]$ 
+```
+
+```shell
+[wind@Ubuntu build]$ cmake --help | cat -n | head -41 | tail -1
+    41    --build <dir>                = Build a CMake-generated project binary tree.
+[wind@Ubuntu build]$ # 此处的<dir>就是cmake生成的那个目录, 即构建目录
+```
+
+---
+
+
+
   
 
   
