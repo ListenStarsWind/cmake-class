@@ -910,5 +910,346 @@ Available commands:
 
 ## 第三章
 
+在上述过程中, 我们对`cmake`有了较为完整的了解, 接下来, 我们会模拟实际开发过程中的各类场景, 去学习更加复杂的`cmake`用法.
 
+当我们把鼠标放在`cmake_minimum_required`上时, cmake扩展就会将该指令的文档网址给出.
+
+![image-20250901153903497](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250901153903497.png)
+
+`cmake_minimum_required`的作用就是限定`cmake`工具的最低版本, 当运行的`cmake`版本比`cmake_minimum_required`所要求的要低时, `cmake`就会返回错误并停止
+
+```shell
+[wind@Ubuntu hello_world]$ cd build
+[wind@Ubuntu build]$ rm -rf ./*
+rm: cannot remove './_CPack_Packages/Linux/STGZ/helloWorld-0.1.1-Linux/bin/hello': Permission denied
+rm: cannot remove './_CPack_Packages/Linux/STGZ/helloWorld-0.1.1-Linux.sh': Permission denied
+rm: cannot remove './_CPack_Packages/Linux/TZ/helloWorld-0.1.1-Linux.tar.Z': Permission denied
+rm: cannot remove './_CPack_Packages/Linux/TZ/helloWorld-0.1.1-Linux/bin/hello': Permission denied
+rm: cannot remove './_CPack_Packages/Linux/TGZ/helloWorld-0.1.1-Linux.tar.gz': Permission denied
+rm: cannot remove './_CPack_Packages/Linux/TGZ/helloWorld-0.1.1-Linux/bin/hello': Permission denied
+[wind@Ubuntu build]$ sudo rm -rf ./*
+[sudo] password for wind: 
+[wind@Ubuntu build]$ cmake --version
+cmake version 3.22.1
+
+CMake suite maintained and supported by Kitware (kitware.com/cmake).
+[wind@Ubuntu build]$ sed -n '2p' ../CMakeList.txt
+sed: can't read ../CMakeList.txt: No such file or directory
+[wind@Ubuntu build]$ sed -n '2p' ../CMakeLists.txt
+cmake_minimum_required(VERSION 3.23)
+[wind@Ubuntu build]$ cmake ..
+CMake Error at CMakeLists.txt:2 (cmake_minimum_required):
+  CMake 3.23 or higher is required.  You are running version 3.22.1
+
+
+-- Configuring incomplete, errors occurred!
+[wind@Ubuntu build]$ 
+```
+
+并且, `cmake_minimum_required`实际上也可以指定区间, 比如`cmake_minimum_required(VERSION 3.18...4.0)`的意思是最低3.18, 最高4.0.
+
+需要注意的是, 版本不符强行退出的功能是在2.6之后才有的, 所以当`cmake`的版本低于2.6时, 即使版本不符, 也只发出警报, 而不强行终止构建过程.此时可以在`cmake_minimum_required(3.18) `后面添加`FATAL_ERROR`以忽略警报. 需要注意的是, 该指令应该放在最前面, 以避免构建一半发现版本不对的情况发生.     另外不建议在`cmake`函数中使用该指令.
+
+对于不同的Linux来说, 预装`cmake`的版本将有所不同
+
+![image-20250901155737682](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250901155737682.png)
+
+----------
+
+`project`有两种形式, 我们上面用的都是基本形式, 除了基本形式之外, `poject`还有许多可选参数, 它们构成了`project`的完整形式
+
+```cmake
+project(<PROJECT-NAME> [<language-name>...])
+project(<PROJECT-NAME>
+        [VERSION <major>[.<minor>[.<patch>[.<tweak>]]]]
+        [COMPAT_VERSION <major>[.<minor>[.<patch>[.<tweak>]]]]
+        [DESCRIPTION <project-description-string>]
+        [HOMEPAGE_URL <url-string>]
+        [LANGUAGES <language-name>...])
+```
+
+`cmake`中存在一个内置变量, `PROJECT_NAME`, 用于描述项目名, `project`的基本功能就是确定这个内置变量的值. 而在后续指令中, 可以通过`${PROJECT_NAME}`的形式取到它的值, 并通过下划线构成其它名称的前缀. 比如当`PROJECT_NAME`是HelloWorld, 那么`${PROJECT-NAME}_static`就会被转换成`HelloWorld_static`.
+
+而在cmake中, 便运用了这种方法, 参与到cmake的其它内置变量的命名方式, cmake中的其它内置变量的形式都是`<PROJECT_NAME>_NAME`, 比如, 对于`PROJECT_NAME`为`helloWorld`的, 便会生成`helloWorld_SOURCE_DIR, helloWorld_BINARY_DIR...`这种形式的内置变量, 你同样可以通过`${}`的形式来取到它们的值, 这种的好处是, 一个大项目, 会被拆分成许多小项目, 每个小项目都有自己的一堆内置变量, 但它们在最后汇总时不会重复, 因为前缀是不同的, 这样就实际实现了类似于命名域的功能.
+
+`CMake` `project()` 可选参数说明
+
+| 参数                                                   | 说明                                                         | 示例                                                |
+| ------------------------------------------------------ | ------------------------------------------------------------ | --------------------------------------------------- |
+| `VERSION <major>[.<minor>[.<patch>[.<tweak>]]]`        | 指定项目版本号，CMake 会生成 `<PROJECT-NAME>_VERSION` 变量以及相关分量变量（如 `_VERSION_MAJOR`、`_VERSION_MINOR`）。 | `project(MyApp VERSION 1.2.3.4)`                    |
+| `COMPAT_VERSION <major>[.<minor>[.<patch>[.<tweak>]]]` | 指定项目兼容版本，通常在安装或导出配置时使用，确保依赖库能匹配兼容版本。 | `project(MyLib VERSION 2.1 COMPAT_VERSION 2.0)`     |
+| `DESCRIPTION <project-description-string>`             | 为项目提供简要描述，生成 `<PROJECT-NAME>_DESCRIPTION` 变量。 | `project(HelloWorld DESCRIPTION "A demo project")`  |
+| `HOMEPAGE_URL <url-string>`                            | 设置项目主页的 URL，生成 `<PROJECT-NAME>_HOMEPAGE_URL` 变量。 | `project(MyApp HOMEPAGE_URL "https://example.com")` |
+| `LANGUAGES <language-name>...`                         | 指定支持的编程语言（默认是 C 和 CXX）。常见值：`C`、`CXX`、`Fortran`、`ASM` 等。 | `project(MyApp LANGUAGES C CXX Fortran)`            |
+
+`cmake`含有指令`message`, 可以为我们打印这些内置变量的值, 其形式是` message([<mode>] "message text" ...)`, 使用打印功能选择`STATUS`
+
+```shell
+[wind@Ubuntu build]$ cat ../CMakeLists.txt | tail -2
+message(STATUS "PROJECT-NAME: ${PROJECT_NAME}")
+message(STATUS "helloWorld_SOURCE_DIR: ${helloWorld_SOURCE_DIR}")[wind@Ubuntu build]$ 
+[wind@Ubuntu build]$ cmake .
+-- PROJECT_NAME: helloWorld
+-- helloWorld_SOURCE_DIR: /home/wind/cmakeClass/hello_world
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/hello_world/build
+[wind@Ubuntu build]$ 
+```
+
+接下来我们介绍`project`的第二个参数`VERSION`, 在`cmake`中, 版本号被分成四个部分, `major`主版本号,`minor`次版本号, `patch`修订号, `tweak`微调号, 在`cmake`中, 可以通过`PROJECT_VERSION_MAJOR, PROJECT_VERSION_MINOR, PROJECT_VERSION_PATCH, PROJECT_VERSION_TWEAK`可以取到, 它们共同构成了一份完整版本号`PROJECT_VERSION`
+
+在`cmake`中, 版本号一般被用在三个场景, 一是使用`message`进行打印, 二是, 在`cmake, cpack`的版本配置文件中, 三是, 生成动静态库时用到的版本号
+
+```shell
+wind@Ubuntu build]$ cat ../CMakeLists.txt | head -8 | tail -5
+# 设置项目名称
+project(helloWorld
+    VERSION 1.2.3.4
+    LANGUAGES C CXX
+)
+[wind@Ubuntu build]$ cat ../CMakeLists.txt | tail -2
+message(STATUS "helloWorld_VERSION: ${helloWorld_VERSION}")
+message(STATUS "helloWorld_VERSION_MAJOR: ${helloWorld_VERSION_MAJOR}")[wind@Ubuntu build]$ 
+[wind@Ubuntu build]$ cmake .
+-- PROJECT_NAME: helloWorld
+-- helloWorld_SOURCE_DIR: /home/wind/cmakeClass/hello_world
+-- helloWorld_VERSION: 1.2.3.4
+-- helloWorld_VERSION_MAJOR: 1
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/hello_world/build
+[wind@Ubuntu build]$ 
+```
+
+-------
+
+接下来介绍`LANGUAGES`这个可选参数, 该选项用于描述项目中所用到的语言, 以便于`cmake`去寻找支持项目的编译器链接器.
+
+```txt
+C, CXX (i.e. C++), CSharp (i.e. C#), CUDA, OBJC (i.e. Objective-C), OBJCXX (i.e. Objective-C++), Fortran, HIP, ISPC, Swift, ASM, ASM_NASM, ASM_MARMASM, ASM_MASM, and ASM-ATT.
+```
+
+在默认情况下, `LANGUAGES`将是`C CXX`. 在第一次构建时, `cmake`会在平台上寻找对应语言所需要的工具, 并进行一些测试, 确定工具的状态, 所支持的功能. 当没有`PROJECT`时, `cmake`会发出警告, 并将项目名称定为`Project`, 并开启默认的`C CXX`语言
+
+```shell
+[wind@Ubuntu build]$ cat ../CMakeLists.txt | head -8 | tail -5
+# 设置项目名称
+# project(helloWorld
+#     VERSION 1.2.3.4
+#     LANGUAGES C CXX
+# )
+[wind@Ubuntu build]$ rm -rf ./*
+[wind@Ubuntu build]$ cmake ..
+CMake Warning (dev) in CMakeLists.txt:
+  No project() command is present.  The top-level CMakeLists.txt file must
+  contain a literal, direct call to the project() command.  Add a line of
+  code such as
+
+    project(ProjectName)
+
+  near the top of the file, but after cmake_minimum_required().
+
+  CMake is pretending there is a "project(Project)" command on the first
+  line.
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0 ## 寻找C/C++所需要的编译器, 并判定执行标准
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done          ## cmake通过一个小的C程序, 测试编译器的特定功能(内存对齐, 传参方式, 数据布局, 文件格式, 可以被统称为ABI)
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- PROJECT_NAME: Project
+-- helloWorld_SOURCE_DIR: 
+-- helloWorld_VERSION: 
+-- helloWorld_VERSION_MAJOR: 
+-- Configuring done                             
+-- Generating done                               ## 将测试结果放在对应文件中
+-- Build files have been written to: /home/wind/cmakeClass/hello_world/build
+[wind@Ubuntu build]$ 
+```
+
+```shell
+[wind@Ubuntu build]$ cd /home/wind/cmakeClass/hello_world/build/CMakeFiles/3.22.1
+[wind@Ubuntu 3.22.1]$ ls -a
+.  ..  CMakeCCompiler.cmake  CMakeCXXCompiler.cmake  CMakeDetermineCompilerABI_C.bin  CMakeDetermineCompilerABI_CXX.bin  CMakeSystem.cmake  CompilerIdC  CompilerIdCXX
+[wind@Ubuntu 3.22.1]$ ll # 如果同时存在不同版本的cmake, 会依据版本把测试结果放在不同的文件夹下
+total 64
+drwxrwxr-x  4 wind wind  4096 Sep  1 18:06 ./
+drwxrwxr-x 34 wind wind  4096 Sep  1 18:06 ../
+-rw-r--r--  1 wind wind  2441 Sep  1 18:06 CMakeCCompiler.cmake
+-rw-r--r--  1 wind wind  5439 Sep  1 18:06 CMakeCXXCompiler.cmake
+-rwxrwxr-x  1 wind wind 15968 Sep  1 18:06 CMakeDetermineCompilerABI_C.bin*
+-rwxrwxr-x  1 wind wind 15992 Sep  1 18:06 CMakeDetermineCompilerABI_CXX.bin*
+-rw-r--r--  1 wind wind   398 Sep  1 18:06 CMakeSystem.cmake
+drwxrwxr-x  3 wind wind  4096 Sep  1 18:06 CompilerIdC/
+drwxrwxr-x  3 wind wind  4096 Sep  1 18:06 CompilerIdCXX/
+[wind@Ubuntu 3.22.1]$ cd -
+/home/wind/cmakeClass/hello_world/build
+[wind@Ubuntu build]$ # 刷新时, 依赖之前的测试结果
+[wind@Ubuntu build]$ cmake .
+CMake Warning (dev) in CMakeLists.txt:
+  No project() command is present.  The top-level CMakeLists.txt file must
+  contain a literal, direct call to the project() command.  Add a line of
+  code such as
+
+    project(ProjectName)
+
+  near the top of the file, but after cmake_minimum_required().
+
+  CMake is pretending there is a "project(Project)" command on the first
+  line.
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- PROJECT_NAME: Project
+-- helloWorld_SOURCE_DIR: 
+-- helloWorld_VERSION: 
+-- helloWorld_VERSION_MAJOR: 
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/hello_world/build
+[wind@Ubuntu build]$ # 不会再进行测试
+
+```
+
+当语言设置有误时, `cmake`就不会调用涉及到的编译器链接器, 从而无法处理源代码报错.
+
+----------
+
+`include`可以加载指定的脚本文件或者模块到`CMakeList.txt`执行上下文中运行. 接下来要说的`include`的文件模块查找逻辑.
+
+对于文件来说, 绝对路径直接加载, 相对路径相对的是`CMakeLists.txt`所在的目录. 对于模块来说, 首先在当前目录查找, 然后在`CMAKE_MODULE_PATH`变量中指定的路径下去查找
+
+```shell
+[wind@Ubuntu build]$ tree ..
+..
+├── build
+├── CMakeLists.txt
+├── sub
+│   └── sub.cmake
+└── test.cpp
+
+2 directories, 3 files
+[wind@Ubuntu build]$ cat ../CMakeLists.txt
+cmake_minimum_required(VERSION 3.18)
+
+project(TestInclude)
+
+add_executable(test test.cpp)
+
+message(STATUS "from top-level CMakeLists.txt")
+
+# 打印源代码目录
+message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
+
+# 打印当前执行cmake脚本的完整名称
+message(STATUS "CMAKE_CURRENT_LIST_FILE: ${CMAKE_CURRENT_LIST_FILE}")
+
+# 打印当前执行cmake脚本的完整目录
+message(STATUS "CMAKE_CURRENT_LIST_DIR: ${CMAKE_CURRENT_LIST_DIR}")
+
+# 包含子目录下的脚本
+include(sub/sub.cmake)[wind@Ubuntu build]$ cat ../sub/sub.cmake
+message(STATUS "from sub/sub.cmake")
+
+# 打印源代码目录
+message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
+
+# 打印当前执行cmake脚本的完整名称
+message(STATUS "CMAKE_CURRENT_LIST_FILE: ${CMAKE_CURRENT_LIST_FILE}")
+
+# 打印当前执行cmake脚本的完整目录
+message(STATUS "CMAKE_CURRENT_LIST_DIR: ${CMAKE_CURRENT_LIST_DIR}")
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- from top-level CMakeLists.txt
+-- CMAKE_CURRENT_SOURCE_DIR: /home/wind/cmakeClass/test_include
+-- CMAKE_CURRENT_LIST_FILE: /home/wind/cmakeClass/test_include/CMakeLists.txt
+-- CMAKE_CURRENT_LIST_DIR: /home/wind/cmakeClass/test_include
+-- from sub/sub.cmake
+-- CMAKE_CURRENT_SOURCE_DIR: /home/wind/cmakeClass/test_include
+-- CMAKE_CURRENT_LIST_FILE: /home/wind/cmakeClass/test_include/sub/sub.cmake
+-- CMAKE_CURRENT_LIST_DIR: /home/wind/cmakeClass/test_include/sub
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/test_include/build
+[wind@Ubuntu build]$ 
+```
+
+从中我们可以看到的是, 由于被包含的文件或者模块是被加载到`CMakeLists.txt`的, 所以其源文件的目录始终都是`CMakeLists.txt`所在的目录, 没有发生变化, 而`CMAKE_CURRENT_LIST_FILE`和`CMAKE_CURRENT_LIST_DIR`则表现了被执行内容的来源, 展现了一定的调用链关系, 所以发生了变化, 真实反应了当前执行的文件或者模块.
+
+---------
+
+接下来说说`install`
+
+`install`的作用就是把二进制可执行文件, 动静态库, 头文件, 配置文件拷贝到指定目录中. 
+
+除了单纯的将相关文件部署到系统的指定目录中, `install`的其它意义在于, 它具有`cmake`自带的跨平台性, 并且, `install`所生成的配置文件脚本, 将会是`cpack`打包时, 临时安装目录的生成依据, `cpack`就相当于把程序安装到临时安装目录里
+
+可以在`cmake`脚本中依据文件的类型后缀等将其部署到开发者所指定的目录.  `install`的参数如下
+
+| 用法/参数                | 说明                                                         | 示例                                                      |
+| ------------------------ | ------------------------------------------------------------ | --------------------------------------------------------- |
+| `install(TARGETS ...)`   | 安装构建的目标（可执行文件、库等）。可以指定安装路径、类型。 | `install(TARGETS myapp DESTINATION bin)`                  |
+| `install(FILES ...)`     | 安装普通文件。                                               | `install(FILES config.json DESTINATION etc/myapp)`        |
+| `install(DIRECTORY ...)` | 安装整个目录（递归复制）。                                   | `install(DIRECTORY docs/ DESTINATION share/doc/myapp)`    |
+| `install(PROGRAMS ...)`  | 安装脚本/程序文件（自动赋可执行权限）。                      | `install(PROGRAMS tools/myscript.sh DESTINATION bin)`     |
+| `install(SCRIPT ...)`    | 安装时执行 CMake 脚本（`cmake -P` 执行）。                   | `install(SCRIPT install_extra.cmake)`                     |
+| `install(CODE ...)`      | 内联 CMake 代码，在安装时执行。                              | `install(CODE "message(STATUS \"Installing...\")")`       |
+| `DESTINATION <dir>`      | 指定安装目标路径（相对于 `CMAKE_INSTALL_PREFIX`）。          | `DESTINATION lib`                                         |
+| `CONFIGURATIONS ...`     | 指定安装适用的构建类型（Debug/Release/RelWithDebInfo/MinSizeRel）。 | `CONFIGURATIONS Release`                                  |
+| `COMPONENT <name>`       | 将安装项归类到某个组件，可用于分组件安装（`cpack` 用）。     | `COMPONENT Runtime`                                       |
+| `PERMISSIONS ...`        | 指定文件权限（OWNER_READ, OWNER_WRITE, OWNER_EXECUTE 等）。  | `PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ`           |
+| `RENAME <name>`          | 安装时重命名目标文件。                                       | `install(FILES old.conf DESTINATION etc RENAME new.conf)` |
+| `OPTIONAL`               | 忽略不存在的文件/目录，不报错。                              | `install(FILES maybe.txt DESTINATION share OPTIONAL)`     |
+| `EXPORT <export-name>`   | 导出目标，用于生成 `*Targets.cmake`，支持 `find_package`。   | `install(TARGETS mylib EXPORT mylibTargets)`              |
+| `INCLUDES DESTINATION`   | 指定头文件安装路径，通常和 `install(TARGETS)` 一起用。       | `install(TARGETS mylib INCLUDES DESTINATION include)`     |
+
+接下来我们打印一下`CMAKE_INSTALL_PREFIX`
+
+```shell
+[wind@Ubuntu build]$ cmake .
+-- from top-level CMakeLists.txt
+-- CMAKE_CURRENT_SOURCE_DIR: /home/wind/cmakeClass/test_include
+-- CMAKE_CURRENT_LIST_FILE: /home/wind/cmakeClass/test_include/CMakeLists.txt
+-- CMAKE_CURRENT_LIST_DIR: /home/wind/cmakeClass/test_include
+-- CMAKE_INSTALL_PREFIX: /usr/local
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/test_include/build
+[wind@Ubuntu build]$ cmake --build .
+[ 50%] Building CXX object CMakeFiles/test.dir/test.cpp.o
+[100%] Linking CXX executable test
+[100%] Built target test
+[wind@Ubuntu build]$ ls
+CMakeCache.txt  CMakeFiles  cmake_install.cmake  Makefile  test
+[wind@Ubuntu build]$ # 当安装过程中, 会在构建目录中生成cmake的安装脚本
+[wind@Ubuntu build]$ sudo cmake --install .
+[sudo] password for wind: 
+-- Install configuration: ""
+-- Installing: /usr/local/bin/test
+[wind@Ubuntu build]$ ls
+CMakeCache.txt  CMakeFiles  cmake_install.cmake  install_manifest.txt  Makefile  test
+
+```
+
+`install`分为三个阶段, 首先, 收集需要安装的文件, 接着, 生成安装脚本, `cmake_install.cmake`, 最后, 让`cmake`以命令模式执行该脚本. 完成安装过程. 在之前的内容中, 我们也使用指令展现过相应内容.
 
