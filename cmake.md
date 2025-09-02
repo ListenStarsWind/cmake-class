@@ -1288,6 +1288,248 @@ build/
 
 --------
 
-接下来我们学习使用`cmake`生成使用静态库. 我们知道静态库是对中间文件(`.o, .obj`)简单的打包归档, 在生成静态库是并不需要把多个`.o, .obj`进行链接, 而只是在静态库被真正使用的时候, 再进行相互链接.
+接下来我们学习使用`cmake`生成使用静态库. 我们知道静态库是对中间文件(`.o, .obj`)简单的打包归档, 在生成静态库是并不需要把多个`.o, .obj`进行链接, 而只是在静态库被真正使用的时候, 再进行相互链接.对于Linux来说, 其静态库的后缀是`.a`
 
-对于Linux来说, 其静态库的后缀是`.a`
+接下来我们将生成并使用一个支持加减法的静态库
+
+我们建立二级结构
+
+```shell
+[wind@Ubuntu my_math]$ tree .
+.
+├── app
+│   ├── CMakeLists.txt
+│   └── main.cpp
+├── CMakeLists.txt
+└── my_lib
+    ├── CMakeLists.txt
+    ├── include
+    │   └── my_math.h
+    └── src
+        ├── add.cpp
+        └── sub.cpp
+
+4 directories, 7 files
+[wind@Ubuntu my_math]$ 
+```
+
+根目录中的`CMkeLists.txt`不执行实际功能, 只负责执行流的调度. `my_lib`负责生成静态库, `app`则负责使用静态库
+
+```shell
+[wind@Ubuntu my_math]$ cd my_lib
+[wind@Ubuntu my_lib]$ cat include/my_math.h
+int add(int, int);
+int sub(int, int);[wind@Ubuntu my_lib]$ 
+[wind@Ubuntu my_lib]$ cat src/add.cpp
+#include"my_math.h"
+int add(int x, int y)
+{
+    return x + y;
+}[wind@Ubuntu my_lib]$ cat src/sub.cpp
+#include"my_math.h"
+int sub(int x, int y)
+{
+    return x - y;
+[wind@Ubuntu my_lib]$ 
+```
+
+```shell
+[wind@Ubuntu my_math]$ cd app
+[wind@Ubuntu app]$ cat main.cpp
+#include<iostream>
+#include"my_math.h"
+
+int main()
+{
+    std::cout<<"3 + 4 == " << add(3,4) << std::endl;
+    std::cout<<"3 - 4 == " << sub(3,4) << std::endl;
+    return 0;
+}   
+[wind@Ubuntu app]$ cat CMakeLists.txt
+# 搜集文件列表
+file(GLOB SRC_LISTS "*.cpp")
+
+# 构建目标
+add_executable(main ${SRC_LISTS})
+
+# 添加链接库列表
+target_link_libraries(main PRIVATE MyMath)
+[wind@Ubuntu app]$ cd ..
+[wind@Ubuntu my_math]$ cat CMakeLists.txt
+cmake_minimum_required(VERSION 3.18)
+
+project(TestMyMath)
+
+# 因为cmake是顺序执行, 所以必须先构建静态库再生成可执行程序
+add_subdirectory(my_lib)
+add_subdirectory(app)[wind@Ubuntu my_math]$ 
+```
+
+```shell
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/my_math/build
+[wind@Ubuntu build]$ ls
+app  CMakeCache.txt  CMakeFiles  cmake_install.cmake  Makefile  my_lib
+[wind@Ubuntu build]$ cmake --build .
+[ 20%] Building CXX object my_lib/CMakeFiles/MyMath.dir/src/add.cpp.o
+[ 40%] Building CXX object my_lib/CMakeFiles/MyMath.dir/src/sub.cpp.o
+[ 60%] Linking CXX static library libMyMath.a
+[ 60%] Built target MyMath
+[ 80%] Building CXX object app/CMakeFiles/main.dir/main.cpp.o
+[100%] Linking CXX executable main
+[100%] Built target main
+[wind@Ubuntu build]$ ls
+app  CMakeCache.txt  CMakeFiles  cmake_install.cmake  Makefile  my_lib
+[wind@Ubuntu build]$ cd my_lib
+[wind@Ubuntu my_lib]$ ls
+CMakeFiles  cmake_install.cmake  libMyMath.a  Makefile
+[wind@Ubuntu my_lib]$ cd ..
+[wind@Ubuntu build]$ cd app
+[wind@Ubuntu app]$ ls
+CMakeFiles  cmake_install.cmake  main  Makefile
+[wind@Ubuntu app]$ ./main
+3 + 4 == 7
+3 - 4 == -1
+[wind@Ubuntu app]$ cd ..
+[wind@Ubuntu build]$ cd ..
+```
+
+下面是一个经过化简的文件树
+
+```shell
+.
+├── app
+│   ├── CMakeLists.txt
+│   └── main.cpp
+├── my_lib
+│   ├── CMakeLists.txt
+│   ├── include
+│   │   └── my_math.h
+│   └── src
+│       ├── add.cpp
+│       └── sub.cpp
+├── CMakeLists.txt
+└── build
+    ├── app
+    │   ├── main            # ← 可执行文件 (由 app/main.cpp 构建)
+    │   └── CMakeFiles/...  # ← 构建中间文件
+    ├── my_lib
+    │   ├── libMyMath.a     # ← 静态库 (由 my_lib/src/*.cpp 构建)
+    │   └── CMakeFiles/...  # ← 构建中间文件
+    ├── CMakeCache.txt
+    ├── CMakeFiles/...      # ← 全局的 CMake 配置文件
+    └── Makefile
+```
+
+我们可以看到, 源目录中的`main.cpp`相对于`app`的位置也是构建目录中`main`相对于`app`的位置, `libMyMath.a`相对于`my_lib`的位置也是源目录中`add.cpp, sub.cpp`相对于`my_lib`的位置. 它们之间的相对路径是保持不变或者呈现镜像关系的.
+
+在`cmake`中, 生成文件的布局被视为目标属性的一部分, 我们可以通过`set_target_properties`搭配它的各类参数对指定类型的目标设置对应的输出路径, 这些参数都是形如`xx_OUTPUT_DIRECTORY`的样子, 其前缀`xx`便描述了目标的类型
+
+对于静态库来说, 是`ARCHIVE_OUTPUT_DIRECTORY`, 动态库是`RUNTIME_OUTPUT_DIRECTORY`, 可执行程序是`RUNTIME_OUTPUT_DIRECTORY`
+
+```shell
+[wind@Ubuntu my_math]$ # CMAKE_BINARY_DIR是构建根目录, 即build
+[wind@Ubuntu my_math]$ tree .
+.
+├── app
+│   ├── CMakeLists.txt
+│   └── main.cpp
+├── build
+├── CMakeLists.txt
+└── my_lib
+    ├── CMakeLists.txt
+    ├── include
+    │   └── my_math.h
+    └── src
+        ├── add.cpp
+        └── sub.cpp
+
+5 directories, 7 files
+[wind@Ubuntu my_math]$ cat my_lib/CMakeLists.txt | tail -4
+# 修改默认输出路径
+set_target_properties(MyMath PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+)
+[wind@Ubuntu my_math]$ cat app/CMakeLists.txt | tail -3
+set_target_properties(main PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+[wind@Ubuntu my_math]$ cd build
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/my_math/build
+[wind@Ubuntu build]$ cmake --build .
+[ 20%] Building CXX object my_lib/CMakeFiles/MyMath.dir/src/add.cpp.o
+[ 40%] Building CXX object my_lib/CMakeFiles/MyMath.dir/src/sub.cpp.o
+[ 60%] Linking CXX static library ../lib/libMyMath.a
+[ 60%] Built target MyMath
+[ 80%] Building CXX object app/CMakeFiles/main.dir/main.cpp.o
+[100%] Linking CXX executable ../bin/main
+[100%] Built target main
+[wind@Ubuntu build]$ cd .. && tree .
+```
+
+化简如下
+
+```shell.
+.
+├── app
+│   ├── CMakeLists.txt
+│   └── main.cpp
+├── my_lib
+│   ├── CMakeLists.txt
+│   ├── include
+│   │   └── my_math.h
+│   └── src
+│       ├── add.cpp
+│       └── sub.cpp
+├── CMakeLists.txt
+└── build
+    ├── bin
+    │   └── main            # ← 可执行文件 (由 app/main.cpp 构建)
+    ├── lib
+    │   └── libMyMath.a     # ← 静态库 (由 my_lib/src/*.cpp 构建)
+    ├── CMakeCache.txt
+    ├── CMakeFiles/...      # ← 全局 CMake 配置与中间文件
+    ├── Makefile
+    └── my_lib
+        └── CMakeFiles/...  # ← my_lib 子目录的中间构建文件
+
+```
+
+`cmake`的设计理念是基于目标的属性传递机制进行构建, 除了上面出现的两个`OUTPUT_DIRECTORY`, 还有许多目标属性, 详情见[官方文档](https://cmake.org/cmake/help/latest/manual/cmake-properties.7.html)
+
+![image-20250902131225981](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250902131225981.png)
+
+
+
+
+
+# 完
