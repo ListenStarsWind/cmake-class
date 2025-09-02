@@ -1253,3 +1253,41 @@ CMakeCache.txt  CMakeFiles  cmake_install.cmake  install_manifest.txt  Makefile 
 
 `install`分为三个阶段, 首先, 收集需要安装的文件, 接着, 生成安装脚本, `cmake_install.cmake`, 最后, 让`cmake`以命令模式执行该脚本. 完成安装过程. 在之前的内容中, 我们也使用指令展现过相应内容.
 
+--------------
+
+`add_executable`用于命令`cmake`从源代码生成一个可执行程序.
+
+有两个参数`add_executable(<name> <options>... <sources>...)`, 第一个参数描述可执行文件的名字, 不加扩展名, 第二个参数则描述了生成源文件所需要的列表.
+
+`add_executable`的一个需要关注的点是, 其所生成二进制中间文件相对于构建目录的相对位置与它所依赖的源文件相对于源目录的相对位置是严格相同的.
+
+比如, 对于一个项目来说, 可能会有源文件和头文件之分, 于是你在源目录下又新建`src, include`这两个子文件夹
+
+```shell
+project/
+├── CMakeLists.txt
+├── src/
+│   ├── main.cpp
+│   └── util.cpp
+├── include/
+│   └── util.h
+```
+
+此时进行项目构建后, 会发现放置`.o`文件的`src`目录相对于`CMakeFiles`的相对目录`./src`与根目录中, `.cpp`文件相对于`CMakeLists.txt`的相对目录`.src`是相同的, 但最终的可执行文件依旧直接放在构建目录下.
+
+```shell
+build/
+├── CMakeFiles/           # 中间文件，保持和源码目录一致的层级
+│   └── src/              # src 下的 .o 文件和依赖关系
+├── Makefile
+├── cmake_install.cmake
+└── myapp                 # 最终可执行文件
+```
+
+有时, 我们可能并不需要最终可执行文件, 我们需要的可能只是库文件,因此, 可能并不需要完全一致的镜像相对路径, 可能镜像相对路径太深了, 此时我们可以使用`RUNTIME_OUTPUT_DIRECTORY`对其进行重新设置, 生成到我们所希望的目录下.
+
+--------
+
+接下来我们学习使用`cmake`生成使用静态库. 我们知道静态库是对中间文件(`.o, .obj`)简单的打包归档, 在生成静态库是并不需要把多个`.o, .obj`进行链接, 而只是在静态库被真正使用的时候, 再进行相互链接.
+
+对于Linux来说, 其静态库的后缀是`.a`
