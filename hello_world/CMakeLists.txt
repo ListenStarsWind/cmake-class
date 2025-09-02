@@ -2,7 +2,10 @@
 cmake_minimum_required(VERSION 3.18)
 
 # 设置项目名称
-project(helloWorld)
+project(helloWorld
+    VERSION 1.2.3.4
+    LANGUAGES C CXX
+)
 
 # 描述依赖关系及目标文件
 add_executable(hello main.cpp)
@@ -31,3 +34,9 @@ install(TARGETS hello)
 # 启用打包功能
 include(CPack)
 # 打包会收集我们在install命令中安装的二进制文件, 将其收录到一定的目录结构中, 并压缩到构建目录
+
+message(STATUS "PROJECT_NAME: ${PROJECT_NAME}")
+message(STATUS "helloWorld_SOURCE_DIR: ${helloWorld_SOURCE_DIR}")
+
+message(STATUS "helloWorld_VERSION: ${helloWorld_VERSION}")
+message(STATUS "helloWorld_VERSION_MAJOR: ${helloWorld_VERSION_MAJOR}")
