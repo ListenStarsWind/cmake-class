@@ -1528,7 +1528,104 @@ set_target_properties(main PROPERTIES
 
 ![image-20250902131225981](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250902131225981.png)
 
+---------------
 
+接下来我们介绍一下`cmake`的三大核心
+
+`cmake`有三大属性: 目标  属性  API , 目标是我们想要的输出文件, 属性是描述目标种种性质的类似于键值表的序列, API则是我们对属性进行管理的工具, 这三者又通过目标属性传递机制结合起来, 构成了`cmake`这个现代化构建系统的基础.
+
+目标的类型
+
+|    类型    |          创建命令          |                         产物/说明                          |
+| :--------: | :------------------------: | :--------------------------------------------------------: |
+| EXECUTABLE |       add_executable       |                    生成二进制可执行文件                    |
+|   STATIC   |  add_library(... STATIC)   |                       生成静态库文件                       |
+|   SHARED   |  add_library(... SHARED)   |                       生成动态库文件                       |
+|   MODULE   |  add_library(... MODULE)   | 一种特殊的, 使用dlopen`/`LoadLibrary运行时加载的动态库文件 |
+|   OBJECT   |  add_library(... OBJECT)   |                 生成.o   .obj这种目标文件                  |
+| INTERFACE  | add_library(... INTERFACE) |   本身不生成目标, 仅描述描述目标生成的依赖文件及编译细节   |
+|  IMPORTED  | add_library(... IMPORTED)  |                引用磁盘上已有的外部依赖文件                |
+|   ALIAS    |   add_library(... ALIAS)   |                   为本项目内的目标取别名                   |
+
+目标属性分类
+
+|          类型           |              作用域              |              典型读写命令               |            常用属性示例            |
+| :---------------------: | :------------------------------: | :-------------------------------------: | :--------------------------------: |
+|    Global(全局属性)     |        整个cmake运行周期         |  get/set_property(GLOBAL PROPERTY...)   |             CMAKE_ROLE             |
+|   Directory(目录属性)   |      当前源码目录及其子目录      | get/set_property(DIRECTORY PROPERTY...) |        INCLUDE_DIRECTORIES         |
+|    Target(目标属性)     | 单个构建目标(库, 可执行, 接口库) |  get/set_property(TARGET PROPERTY...)   | LINK_LIBRARIES INCLUDE_DIRECTORIES |
+| Source File(源文件属性) |        单个源码, 资源文件        |     get/set_source_files_properties     |           COMOPILE_FLAGS           |
+|     Test(测试属性)      |    由add_test()定义的单个测试    |       get/set_tests_properties()        |         WORKING_DIRECTORY          |
+|      安装文件属性       |       install() 生成的安装       |        set_property(INSTALL...)         |               RPATH                |
+
+属性的作用域与传播范围
+
+|  关键字   | 对当前目标的构建影响 | 是否传播 | 对当前目标使用者的影响 | 解释             | 例子                                 |
+| :-------: | :------------------: | :------: | :--------------------: | ---------------- | ------------------------------------ |
+|  PRIVATE  |         生效         |    否    |         不生效         | 只自己用         | 制作面包的面粉品牌不公开             |
+|  PUBLIC   |         生效         |    是    |          生效          | 自己-下游用      | 公开制作面包的面粉品牌               |
+| INTERFACE |        不生效        |    是    |          生效          | 自己不用, 下游用 | 说明书, 说明用什么面粉制作, 不卖东西 |
+
+操作目标属性的API
+
+|     类型      |                    典型关键字(可选关键字)                    |                           主要作用                           |                      涉及的部分核心属性                      |
+| :-----------: | :----------------------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------: |
+| 通用读/写接口 |     set_target_properties() <br>get_target_properties()      |                   任意目标属性, 最底层API                    |                         任何prop_tgt                         |
+| 编译阶段相关  | target_compile_definitions<br>target_compile_options<br>target_precompile_headers<br>target_include_directories<br>target_sources | 控制源文件编译: 宏定义;<BR>编译选项,语言特性,预编译头,<BR>包含目录,源文件列表 | COMPILE_DEFINITIONS<BR>COMPILE_OPTIONS<BR>COMPILE_FEATURES<BR>PRECOMPILE_HEADERS<BR>INCLUDE_DIRECTORIES<BR>SOURCES等 |
+| 链接输出阶段  | target_link_libraries<br>target_link_options<br>target_link_directories |              配置目标被链接时库, 选项及搜索路径              | LINK_LIBRARIES<BR>INTERFACE_LINK_LIBRARIES<BR>LINK_OPTIONS<BR>INTERFACE_LINK_OPTIONSLINK_DIRECTORIES<BR>INTERFACE_LINK_DIRECTORIES |
+| 安装打包阶段  |          install(TARGETS...)<BR>install(EXPORT...)           |   生成安装规则与包, 控制目标在安装树中的布局及其运行时行为   |     RUNTIME_OUTPUT_DIRECTORY<BR>LIBRARY_OUTPUT_DIRECTORY     |
+
+`cmake`的工作流程
+
+首先在配置阶段, 就是`cmake`读取`CMakeLists.txt`时, 如果是`add`形式的API, `cmake`会将其中对象加载注册到全局目标列表; 在生成阶段, 则依据这些目标属性, 生成`makefile`这类各平台自己的项目构建文件, 构建阶段, 会依据前面生成的构建文件进行编译链接; 安装期, 则是直接使用依据安装属性生成的`cmake_install.cmake`脚本
+
+---
+
+在[官方文档](https://cmake.org/cmake/help/latest/manual/cmake-buildsystem.7.html#manual:cmake-buildsystem(7))中, 我们可以看到`cmake`所支持的详细目标类型
+
+`cmake`支持的二进制目标
+
+![image-20250903103554402](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250903103554402.png)
+
+支持的可执行程序
+
+![image-20250903104204156](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250903104204156.png)
+
+可执行程序, 导入程序, 别名可执行程序
+
+支持的库文件, 包括普通库, 目标文件库, 接口库, 导入库, 接口库
+
+![image-20250903104449241](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250903104449241.png)
+
+指令皆可以在[指令手册](https://cmake.org/cmake/help/latest/manual/cmake-commands.7.html)中找到对应链接
+
+![image-20250903104702033](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250903104702033.png)
+
+-------
+
+`cmake`为我们提供了`add_library`这个指令, 供我们生成库目标文件.形式为
+
+```cmake
+add_library(<name> [STATIC | SHARED | MODULE] [EXCLUDE_FROM_ALL] [<source>...])
+```
+
+- name: 库的名称, 不包含前缀lib和后缀 .a, .so
+- STATIC | SHARED | MODULE : 表示生成库目标的类型
+- <source\>: 构建库目标所需的源文件
+
+目标库: 其实就是.o   .obj这类目标文件, 可以直接当源文件使用
+静态库: .o文件经过打包归档形成的库
+动态库: .o文件经过打包归档链接形成的库
+模块库: 特殊的动态库, 通过dlopen`/`LoadLibrary在运行时使用
+接口库: 向库的使用者规定库所需要的依赖文件, 库的使用方式, 不是库文件(gcc -l -L这些选项的参数)
+导入库: 提供  为不兼容`cmake`, 老的库    的链接方案, 可以把磁盘上的外部库导入项目中
+别名库: 为库起别名, 可以通过增加前缀后缀的方式, 把库的一些性质反映到名字上, 比如静态加后缀`_static`, 动态加`_shared`
+
+---
+
+`target_include_directories`负责将头文件的所在目录路径写入到`target`的属性列表中, 并依据`PUBLIC PRIVATE INTERFACE`关键字控制它们在依赖链中的传播方式, 对于`makefile`来说, 其最终会在`gcc -I`选项中被链接, `target_include_directories`支持多个路径的添加, 可以把同样传播属性的路径放在一块来写.
+
+于此相关的是`INTERFACE_LIBRARY  INTERFACE_INCLUDE_DIRECTORIES`这两个目标属性, `INTERFACE_LIBRARY`中的路径仅会在项目内部被包含, 而不会在下游中生效, 而在`INTERFACE_INCLUDE_DIRECTORIES`中, 则会在下游调用链中存在. `PRIVATE`会把路径写入到`INTERFACE_LIBRARY`中, 而`INTERFACE`则是把路径写入到`INTERFACE_INCLUDE_DIRECTORIES`中,`PUBLIC`则是两个都写. 所以 `PUBLIC `目标自己包含, 使用目标的也包含,  `PRIVATE`仅自己包含, `INTERFACE`仅使用目标的包含. 
 
 
 
