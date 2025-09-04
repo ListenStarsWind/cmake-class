@@ -1627,6 +1627,174 @@ add_library(<name> [STATIC | SHARED | MODULE] [EXCLUDE_FROM_ALL] [<source>...])
 
 于此相关的是`INTERFACE_LIBRARY  INTERFACE_INCLUDE_DIRECTORIES`这两个目标属性, `INTERFACE_LIBRARY`中的路径仅会在项目内部被包含, 而不会在下游中生效, 而在`INTERFACE_INCLUDE_DIRECTORIES`中, 则会在下游调用链中存在. `PRIVATE`会把路径写入到`INTERFACE_LIBRARY`中, 而`INTERFACE`则是把路径写入到`INTERFACE_INCLUDE_DIRECTORIES`中,`PUBLIC`则是两个都写. 所以 `PUBLIC `目标自己包含, 使用目标的也包含,  `PRIVATE`仅自己包含, `INTERFACE`仅使用目标的包含. 
 
+-------------
+
+`target_link_libraries`相当于使用通用的`set`属性设置了`LINK_LIBRARIES`或者`INTERFACE_LINK_LIBRARIES`, 具体设置谁依靠传播路径关键字来进行判断, 具体形式形如
+
+```cmake
+target_link_libraries(<target>
+					<PRIVATE | PUBLIC | INTERFACE> <item>...
+					[<PRIVATE | PUBLIC | INTERFACE> <item>]...
+)
+
+set_target_properties(<target> PROPERITES
+					LINK_LIBRARIES | INTERFACE_LINK_LIBRARIES <item>
+)
+```
+
+`PRIVATE | PUBLIC | INTERFACE`这三个作用域关键字的作用和`target_include_directories`是完全相同的, 其背后的作用机理也是相同的.
+
+---------------
+
+我们将进行一场实验, 实验目的是通过实际实验观察`cmake`的INTERFACE_LINK_LIBRARIES的传递机制, 我们将设计两个简单的cmake项目, 其中项目A作为被使用方, 项目B作为使用方. 在项目A中, 我们将会使用`target_link_libraries`为A添加一系列的被写入`INTERFACE_LINK_LIBRARIES`目标属性的lib, 随后将项目A安装到系统中, 在项目B中查找并使用项目A, 并通过`cmake --build . -v`查看编译链接中涉及到的库, 与项目A对照, 从而直观体验`INTERFACE_LINK_LIBRARIES`供使用者使用的性质, 这两个项目, 不需要有实际功能, 并应尽量简便, 以便我们快速的进行实验.
+
+```cpp
+// libA.cpp
+void fooA() {}
+
+```
+
+```cmake
+# A的CmakeLists.txt
+cmake_minimum_required(VERSION 3.15)
+project(ProjectA LANGUAGES CXX)
+
+# 1. 创建一个静态库 A
+add_library(A STATIC libA.cpp)
+
+# 2. 模拟一些依赖库
+# 这里使用系统库作为例子，或者你可以用其他空库
+target_link_libraries(A
+    INTERFACE
+        m           # 数学库
+        pthread     # pthread库
+)
+
+# 3. 安装库
+install(TARGETS A
+        EXPORT ProjectAConfig
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
+        INCLUDES DESTINATION include)
+
+# 4. 安装导出文件，供find_package使用
+install(EXPORT ProjectAConfig
+        DESTINATION lib/cmake/ProjectA)
+
+```
+
+```cpp
+// B-main.cpp
+int main() {
+    return 0;
+}
+
+```
+
+```cmake
+# B的CMakeLists.txt
+cmake_minimum_required(VERSION 3.15)
+project(ProjectB LANGUAGES CXX)
+
+# 假设 ProjectA 已安装到系统路径中
+find_package(ProjectA REQUIRED PATHS "/usr/local/lib/cmake/ProjectA" NO_DEFAULT_PATH)
+
+add_executable(B main.cpp)
+
+# 链接 ProjectA
+target_link_libraries(B PRIVATE A)
+
+```
+
+```shell
+[wind@Ubuntu interface_link_demo]$ mkdir A
+[wind@Ubuntu interface_link_demo]$ mkdir B
+[wind@Ubuntu interface_link_demo]$ cd A
+[wind@Ubuntu A]$ touch CMakeLists.txt
+[wind@Ubuntu A]$ touch libA.cpp
+[wind@Ubuntu A]$ mkdir build
+[wind@Ubuntu A]$ cd ..
+[wind@Ubuntu interface_link_demo]$ cd B
+[wind@Ubuntu B]$ touch CMakeLists.txt
+[wind@Ubuntu B]$ touch main.cpp
+[wind@Ubuntu B]$ mkdir build
+[wind@Ubuntu B]$ cd ..
+[wind@Ubuntu interface_link_demo]$ cd A
+[wind@Ubuntu A]$ cd build/
+[wind@Ubuntu build]$ cmake ..
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/interface_link_demo/A/build
+[wind@Ubuntu build]$ cmake --build .
+[ 50%] Building CXX object CMakeFiles/A.dir/libA.cpp.o
+[100%] Linking CXX static library libA.a
+[100%] Built target A
+[wind@Ubuntu build]$ sudo cmake --install .
+[sudo] password for wind: 
+-- Install configuration: ""
+-- Installing: /usr/local/lib/libA.a
+-- Installing: /usr/local/lib/cmake/ProjectA/ProjectAConfig.cmake
+-- Installing: /usr/local/lib/cmake/ProjectA/ProjectAConfig-noconfig.cmake
+[wind@Ubuntu build]$ cd ..
+[wind@Ubuntu A]$ cd ..
+[wind@Ubuntu interface_link_demo]$ cd B
+[wind@Ubuntu B]$ cd build/
+[wind@Ubuntu build]$ cmake ..
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/interface_link_demo/B/build
+[wind@Ubuntu build]$ cmake --build . -j -v
+/usr/bin/cmake -S/home/wind/cmakeClass/interface_link_demo/B -B/home/wind/cmakeClass/interface_link_demo/B/build --check-build-system CMakeFiles/Makefile.cmake 0
+/usr/bin/cmake -E cmake_progress_start /home/wind/cmakeClass/interface_link_demo/B/build/CMakeFiles /home/wind/cmakeClass/interface_link_demo/B/build//CMakeFiles/progress.marks
+/usr/bin/gmake  -f CMakeFiles/Makefile2 all
+gmake[1]: Entering directory '/home/wind/cmakeClass/interface_link_demo/B/build'
+/usr/bin/gmake  -f CMakeFiles/B.dir/build.make CMakeFiles/B.dir/depend
+gmake[2]: Entering directory '/home/wind/cmakeClass/interface_link_demo/B/build'
+cd /home/wind/cmakeClass/interface_link_demo/B/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/wind/cmakeClass/interface_link_demo/B /home/wind/cmakeClass/interface_link_demo/B /home/wind/cmakeClass/interface_link_demo/B/build /home/wind/cmakeClass/interface_link_demo/B/build /home/wind/cmakeClass/interface_link_demo/B/build/CMakeFiles/B.dir/DependInfo.cmake --color=
+gmake[2]: Leaving directory '/home/wind/cmakeClass/interface_link_demo/B/build'
+/usr/bin/gmake  -f CMakeFiles/B.dir/build.make CMakeFiles/B.dir/build
+gmake[2]: Entering directory '/home/wind/cmakeClass/interface_link_demo/B/build'
+[ 50%] Building CXX object CMakeFiles/B.dir/main.cpp.o
+/usr/bin/c++    -MD -MT CMakeFiles/B.dir/main.cpp.o -MF CMakeFiles/B.dir/main.cpp.o.d -o CMakeFiles/B.dir/main.cpp.o -c /home/wind/cmakeClass/interface_link_demo/B/main.cpp
+[100%] Linking CXX executable B
+/usr/bin/cmake -E cmake_link_script CMakeFiles/B.dir/link.txt --verbose=1
+/usr/bin/c++ CMakeFiles/B.dir/main.cpp.o -o B  /usr/local/lib/libA.a -lm -lpthread 
+gmake[2]: Leaving directory '/home/wind/cmakeClass/interface_link_demo/B/build'
+[100%] Built target B
+gmake[1]: Leaving directory '/home/wind/cmakeClass/interface_link_demo/B/build'
+/usr/bin/cmake -E cmake_progress_start /home/wind/cmakeClass/interface_link_demo/B/build/CMakeFiles 0
+[wind@Ubuntu build]$ 
+```
+
+观察`/usr/bin/c++ CMakeFiles/B.dir/main.cpp.o -o B  /usr/local/lib/libA.a -lm -lpthread `我们可以看到, 在项目A中写入`INTERFACE_LINK_LIBRARIES`的库, 在项目B中都被一一链接.
+
+如果将A改为动态库, 由于动态库自身已经包含了链接过程, 所以并不会看到-l的其它内容
+
+最后把A从系统中删除, 避免污染系统
+
+```shell
+[wind@Ubuntu build]$ cd ../../
+[wind@Ubuntu interface_link_demo]$ cd A/build/
+[wind@Ubuntu build]$ sudo xargs rm < install_manifest.txt
+[wind@Ubuntu build]$ 
+```
+
+在上述过程中, 目标`B`的链接有两个来源, 一是它自身就链接使用的`libA`, 二是`libA`中通过`INTERFACE_LINK_LIBRARIES`传递给`B`的哪些需要链接的库, 项目`B`的`cmake`就会通过读取项目`A`传递下来的`INTERFACE_LINK_LIBRARIES`, 从而知道还要链接哪些库. 而在实际开发过程中. 这个过程是递归的, 项目`B`依赖`libA`, `libA`在使用时需要数学库`m`和线程库`pthread`, 相对应的`m`和`pthread`也可能有自己的`INTERFACE_LINK_LIBRARIES`, 因此就需要进一步寻找, 但我们这里, 一方面`m`和`pthread`是动态库, 它在生成中自己内部已经链接过了, 另一方面, 这些库非常基础, 所以从设计理念上来说, 即使换成静态库, 也不一定能发现还需要其它库, 所以递归在这里就停止了.
+
+不过在实际开发中, 我们有时不会把权限划分地特别细, 类似与C++都使用`public`继承, 在`cmake`中, 一般都是都是用`PUBLIC`权限关键字, 这样比较省事.
 
 
 # 完
