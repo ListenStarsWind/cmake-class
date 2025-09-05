@@ -1796,5 +1796,188 @@ gmake[1]: Leaving directory '/home/wind/cmakeClass/interface_link_demo/B/build'
 
 不过在实际开发中, 我们有时不会把权限划分地特别细, 类似与C++都使用`public`继承, 在`cmake`中, 一般都是都是用`PUBLIC`权限关键字, 这样比较省事.
 
+------------
+
+下面, 我们再在上面实验的基础上, 再把头文件的搜索路径, 也就是`target_include_directories`添加进来.
+
+我们建立如图的项目结构
+
+```shell
+[wind@Ubuntu test_target_link_libraries]$ tree .
+.
+├── build
+├── CMakeLists.txt
+├── main.cpp
+└── src
+    ├── add.cpp
+    └── CMakeLists.txt
+
+2 directories, 4 files
+[wind@Ubuntu test_target_link_libraries]$ 
+```
+
+```cmake
+# src下的CMakeLists.txt
+add_library(add STATIC add.cpp)
+
+## 第三方库
+
+# 添加静态库头文件的包含路径 
+target_include_directories(add PRIVATE "/usr/local/include/private")
+target_include_directories(add PUBLIC "/usr/local/include/public")
+target_include_directories(add INTERFACE "/usr/local/include/interface")
+
+# 添加库文件搜索路径
+target_link_directories(add PRIVATE "/usr/local/lib/private")
+target_link_directories(add PUBLIC "/usr/local/lib/public")
+target_link_directories(add INTERFACE "/usr/local/lib/interface")
+
+## 系统库
+target_link_libraries(add INTERFACE "pthread")
+
+```
+
+```cpp
+// add.cpp
+// 我们不写任何逻辑, 也不包含实际头文件这是因为CMakeLists.txt中包含的第三
+// 方库, 实际上都不存在, 路径都是编的, 所以也没法包含, 我们只是让编译器走个过场
+
+```
+
+```cmake
+# 顶层CMakeLists.txt
+cmake_minimum_required(VERSION 3.18)
+
+project(TestLinkLibrary 
+    LANGUAGES CXX
+)
+
+add_subdirectory(src)
+
+add_executable(main main.cpp)
+
+target_link_libraries(main PRIVATE add)
+
+```
+
+```cpp
+// main.cpp
+int main()
+{
+    return 0;
+}
+
+```
+
+```shell
+[wind@Ubuntu test_target_link_libraries]$ cd build
+[wind@Ubuntu build]$ cmake ..
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/test_target_link_libraries/build
+[wind@Ubuntu build]$ cmake --build . -v
+/usr/bin/cmake -S/home/wind/cmakeClass/test_target_link_libraries -B/home/wind/cmakeClass/test_target_link_libraries/build --check-build-system CMakeFiles/Makefile.cmake 0
+/usr/bin/cmake -E cmake_progress_start /home/wind/cmakeClass/test_target_link_libraries/build/CMakeFiles /home/wind/cmakeClass/test_target_link_libraries/build//CMakeFiles/progress.marks
+/usr/bin/gmake  -f CMakeFiles/Makefile2 all
+gmake[1]: Entering directory '/home/wind/cmakeClass/test_target_link_libraries/build'
+/usr/bin/gmake  -f src/CMakeFiles/add.dir/build.make src/CMakeFiles/add.dir/depend
+gmake[2]: Entering directory '/home/wind/cmakeClass/test_target_link_libraries/build'
+cd /home/wind/cmakeClass/test_target_link_libraries/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/wind/cmakeClass/test_target_link_libraries /home/wind/cmakeClass/test_target_link_libraries/src /home/wind/cmakeClass/test_target_link_libraries/build /home/wind/cmakeClass/test_target_link_libraries/build/src /home/wind/cmakeClass/test_target_link_libraries/build/src/CMakeFiles/add.dir/DependInfo.cmake --color=
+gmake[2]: Leaving directory '/home/wind/cmakeClass/test_target_link_libraries/build'
+/usr/bin/gmake  -f src/CMakeFiles/add.dir/build.make src/CMakeFiles/add.dir/build
+gmake[2]: Entering directory '/home/wind/cmakeClass/test_target_link_libraries/build'
+[ 25%] Building CXX object src/CMakeFiles/add.dir/add.cpp.o
+
+# 静态库add-I选项
+cd /home/wind/cmakeClass/test_target_link_libraries/build/src && /usr/bin/c++  -I/usr/local/include/private -I/usr/local/include/public  -MD -MT src/CMakeFiles/add.dir/add.cpp.o -MF CMakeFiles/add.dir/add.cpp.o.d -o CMakeFiles/add.dir/add.cpp.o -c /home/wind/cmakeClass/test_target_link_libraries/src/add.cpp
+
+[ 50%] Linking CXX static library libadd.a
+cd /home/wind/cmakeClass/test_target_link_libraries/build/src && /usr/bin/cmake -P CMakeFiles/add.dir/cmake_clean_target.cmake
+cd /home/wind/cmakeClass/test_target_link_libraries/build/src && /usr/bin/cmake -E cmake_link_script CMakeFiles/add.dir/link.txt --verbose=1
+/usr/bin/ar qc libadd.a CMakeFiles/add.dir/add.cpp.o
+/usr/bin/ranlib libadd.a
+gmake[2]: Leaving directory '/home/wind/cmakeClass/test_target_link_libraries/build'
+[ 50%] Built target add
+/usr/bin/gmake  -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/depend
+gmake[2]: Entering directory '/home/wind/cmakeClass/test_target_link_libraries/build'
+cd /home/wind/cmakeClass/test_target_link_libraries/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/wind/cmakeClass/test_target_link_libraries /home/wind/cmakeClass/test_target_link_libraries /home/wind/cmakeClass/test_target_link_libraries/build /home/wind/cmakeClass/test_target_link_libraries/build /home/wind/cmakeClass/test_target_link_libraries/build/CMakeFiles/main.dir/DependInfo.cmake --color=
+gmake[2]: Leaving directory '/home/wind/cmakeClass/test_target_link_libraries/build'
+/usr/bin/gmake  -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/build
+gmake[2]: Entering directory '/home/wind/cmakeClass/test_target_link_libraries/build'
+[ 75%] Building CXX object CMakeFiles/main.dir/main.cpp.o
+
+# 可执行程序main-I选项
+/usr/bin/c++  -I/usr/local/include/public -I/usr/local/include/interface  -MD -MT CMakeFiles/main.dir/main.cpp.o -MF CMakeFiles/main.dir/main.cpp.o.d -o CMakeFiles/main.dir/main.cpp.o -c /home/wind/cmakeClass/test_target_link_libraries/main.cpp
+
+[100%] Linking CXX executable main
+
+# 可执行程序main -L 和 -l 选项
+/usr/bin/cmake -E cmake_link_script CMakeFiles/main.dir/link.txt --verbose=1
+/usr/bin/c++ CMakeFiles/main.dir/main.cpp.o -o main   -L/usr/local/lib/public  -L/usr/local/lib/interface  -Wl,-rpath,/usr/local/lib/public:/usr/local/lib/interface src/libadd.a -lpthread 
+
+gmake[2]: Leaving directory '/home/wind/cmakeClass/test_target_link_libraries/build'
+[100%] Built target main
+gmake[1]: Leaving directory '/home/wind/cmakeClass/test_target_link_libraries/build'
+/usr/bin/cmake -E cmake_progress_start /home/wind/cmakeClass/test_target_link_libraries/build/CMakeFiles 0
+[wind@Ubuntu build]$ 
+```
+
+在子目录`src`中, 我们创建了一个静态库`add`, 由于是静态库, 没有链接, 所以在`libadd.a`的生成过程中, 并没有任何`/usr/local/lib`路径被链接.
+
+我们通过`target_include_directories(add PRIVATE "/usr/local/include/private")`将该路径写入了`INCLUDE_DIRECTORIES`中
+`target_include_directories(add PUBLIC "/usr/local/include/public")`将该路径写入了`INCLUDE_DIRECTORIES`和`INTERFACE_INCLUDE_DIRECTORIES`中
+`target_include_directories(add INTERFACE "/usr/local/include/interface")`将该路径写入了`INTERFACE_INCLUDE_DIRECTORIES`中, 也就是说
+
+对于静态库`add`来说, 其`INCLUDE_DIRECTORIES`包含的路径有`/usr/local/include/private`和`/usr/local/include/public`, 其`INTERFACE_INCLUDE_DIRECTORIES`包含的路径有`/usr/local/include/public`和`/usr/local/include/interface`
+
+因此我们可以看到`/usr/bin/c++  -I/usr/local/include/private -I/usr/local/include/public`
+
+另外, `target_link_directories(add PRIVATE "/usr/local/lib/private")`将该路径写入到`LINK_DIRECTORIES `中
+`target_link_directories(add PUBLIC "/usr/local/lib/public")`将该路径写入到`LINK_DIRECTORIES`和`INTERFACE_LINK_DIRECTORIES`中
+`target_link_directories(add INTERFACE "/usr/local/lib/interface")`将该路径写入到`INTERFACE_LINK_DIRECTORIES`中, 也就是说, `add`的`LINK_DIRECTORIES`中含有`/usr/local/lib/private`和`/usr/local/lib/public`, 而`INTERFACE_LINK_DIRECTORIES`含有`/usr/local/lib/public`和`/usr/local/lib/interface`
+
+最后`target_link_libraries(add INTERFACE "pthread")`将`pthread`写入到`INTERFACE_LINK_LIBRARIES`中
+
+而对于`main`可执行程序来说, `target_link_libraries(main PRIVATE add)`将`add`写入`LINK_LIBRARIES`中, 而对于其所使用的`add`来说, `main`作为使用者, 还会包含从`add`传播下来的`INTERFACE_INCLUDE_DIRECTORIES`, `INTERFACE_LINK_DIRECTORIES`,`INTERFACE_LINK_LIBRARIES`, 于是就有
+`/usr/bin/c++ CMakeFiles/main.dir/main.cpp.o -o main   -L/usr/local/lib/public  -L/usr/local/lib/interface  -Wl,-rpath,/usr/local/lib/public:/usr/local/lib/interface src/libadd.a -lpthread `和`/usr/bin/c++  -I/usr/local/include/public -I/usr/local/include/interface  -MD -MT `
+
+-----------
+
+在之前, 我们曾粗略介绍了`cmake`操作目标属性的API
+
+|     类型      |                    典型关键字(可选关键字)                    |                           主要作用                           |                      涉及的部分核心属性                      |
+| :-----------: | :----------------------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------: |
+| 通用读/写接口 |     set_target_properties() <br>get_target_properties()      |                   任意目标属性, 最底层API                    |                         任何prop_tgt                         |
+| 编译阶段相关  | target_compile_definitions<br>target_compile_options<br>target_precompile_headers<br>target_include_directories<br>target_sources | 控制源文件编译: 宏定义;<BR>编译选项,语言特性,预编译头,<BR>包含目录,源文件列表 | COMPILE_DEFINITIONS<BR>COMPILE_OPTIONS<BR>COMPILE_FEATURES<BR>PRECOMPILE_HEADERS<BR>INCLUDE_DIRECTORIES<BR>SOURCES等 |
+| 链接输出阶段  | target_link_libraries<br>target_link_options<br>target_link_directories |              配置目标被链接时库, 选项及搜索路径              | LINK_LIBRARIES<BR>INTERFACE_LINK_LIBRARIES<BR>LINK_OPTIONS<BR>INTERFACE_LINK_OPTIONSLINK_DIRECTORIES<BR>INTERFACE_LINK_DIRECTORIES |
+| 安装打包阶段  |          install(TARGETS...)<BR>install(EXPORT...)           |   生成安装规则与包, 控制目标在安装树中的布局及其运行时行为   |     RUNTIME_OUTPUT_DIRECTORY<BR>LIBRARY_OUTPUT_DIRECTORY     |
+
+接下来我们将详细说明它们
+
+`set_target_properties() `和`get_target_properties()`是用来对`cmake`的各类属性进行读写操作的API接口.`cmake`的属性可以被分为 全局属性  目标属性   目录属性   测试属性 源文件属性  缓存条目属性 安装文件属性, 这七类, 这七类属性都可以用`get_target_properties`来取,         对于`cmake`属性的另外一种分法, 是将其分为依赖于目标的属性和不依赖目标, `cmake`自己的属性, 其中, 依赖于不依赖于目标属性的, 可以被视为一种全局变量, 可以使用`${}`直接转义, 而对于依赖于目标的那些属性, 就只能用`get_target_properties`来取. 除此之外, 还有"第八类" 用户自定义变量, 也可以用`${}`转义, 直接获取.   目标属性依赖于目标, 其它的六类是不依赖于目标的
+
+基本形式为
+
+```cmake
+set_target_properties(<target1> <target2> ...
+					PROPERTIES <prop1> <value1>
+							  <prop2> <value2>...)
+							  
+get_target_properties(<variable> <target> <property>)
+```
+
+需要注意的是别名目标不能设置属性, 因为别名目标是只读的,
+
+[在此处](https://cmake.org/cmake/help/latest/manual/cmake-properties.7.html#target-properties)列举了`cmake`的所有目标属性, 部分常见的属性进行了专门的接口特化, 使之能够更方便地进行设置.
+
+ 接下来我们就再新建一个项目, 并通过上面的两个接口对目标属性和安装属性进行设置
+
+
 
 # 完
