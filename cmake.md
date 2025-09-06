@@ -1978,6 +1978,538 @@ get_target_properties(<variable> <target> <property>)
 
  接下来我们就再新建一个项目, 并通过上面的两个接口对目标属性和安装属性进行设置
 
+```shell
+[wind@Ubuntu test_set_target_properties]$ tree .
+.
+├── build
+├── CMakeLists.txt
+├── main.cpp
+└── src
+    ├── add.cpp
+    └── CMakeLists.txt
 
+2 directories, 4 files
+[wind@Ubuntu test_set_target_properties]$ 
+```
+
+```cmake
+# 顶层CMakeLists.txt
+cmake_minimum_required(VERSION 3.18)
+
+project(TestProp
+        LANGUAGES CXX
+)
+
+add_subdirectory(src)
+
+add_executable(main main.cpp)
+
+target_link_libraries(main PRIVATE add)
+
+```
+
+```cpp
+// main.cpp
+#include<iostream>
+
+int main()
+{
+    return 0;
+}
+
+```
+
+```cmake
+# src下的CMakeLists.txt
+# 这次我们使用动态库
+add_library(add SHARED add.cpp)
+
+set_target_properties(add PROPERTIES
+
+        ## 目标属性
+
+            # 编译属性
+                COMPILE_OPTIONS "-g"
+                COMPILE_OPTIONS "-O3"
+                COMPILE_OPTIONS "-fPIC"                  
+
+                INCLUDE_DIRECTORIES "/public"
+                INTERFACE_INCLUDE_DIRECTORIES "/interface"
+
+            # 链接属性
+                LINK_DIRECTORIES "/public"
+                INTERFACE_LINK_DIRECTORIES "/interface"
+                LINK_LIBRARIES "curl"
+                INTERFACE_LINK_LIBRARIES "jsoncpp"             # sudo apt install libjsoncpp-dev
+
+            # 输出属性
+                RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+                ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+                LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+
+            BUILD_RPATH "${CMAKE_BINARY_DIR}/lib"  # 为项目中的动态库文件临时链接提供方案, 这样就不需要将其安装到系统中
+
+        ## 安装属性
+            # 库在安装到系统后, BUILD_RPATH就会失效, 转而使用系统的安装路径
+            INSTALL_RPATH "lib" #  实际上就是/usr/local/lib
+            OUTPUT_NAME "add"
+            VERSION "1.2.3"
+            SOVERSION "20"      #  动态库的兼容版本, 描述库中所提供接口执行的标准, 为用户提供一种简便的验证接口是否还可用的方式
+)
+
+```
+
+```cpp
+// src下的add.cpp
+
+```
+
+```shell
+[wind@Ubuntu test_set_target_properties]$ cd build
+[wind@Ubuntu build]$ cmake ..
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/test_set_target_properties/build
+[wind@Ubuntu build]$ cmake --build . -v
+/usr/bin/cmake -S/home/wind/cmakeClass/test_set_target_properties -B/home/wind/cmakeClass/test_set_target_properties/build --check-build-system CMakeFiles/Makefile.cmake 0
+/usr/bin/cmake -E cmake_progress_start /home/wind/cmakeClass/test_set_target_properties/build/CMakeFiles /home/wind/cmakeClass/test_set_target_properties/build//CMakeFiles/progress.marks
+/usr/bin/gmake  -f CMakeFiles/Makefile2 all
+gmake[1]: Entering directory '/home/wind/cmakeClass/test_set_target_properties/build'
+/usr/bin/gmake  -f src/CMakeFiles/add.dir/build.make src/CMakeFiles/add.dir/depend
+gmake[2]: Entering directory '/home/wind/cmakeClass/test_set_target_properties/build'
+cd /home/wind/cmakeClass/test_set_target_properties/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/wind/cmakeClass/test_set_target_properties /home/wind/cmakeClass/test_set_target_properties/src /home/wind/cmakeClass/test_set_target_properties/build /home/wind/cmakeClass/test_set_target_properties/build/src /home/wind/cmakeClass/test_set_target_properties/build/src/CMakeFiles/add.dir/DependInfo.cmake --color=
+gmake[2]: Leaving directory '/home/wind/cmakeClass/test_set_target_properties/build'
+/usr/bin/gmake  -f src/CMakeFiles/add.dir/build.make src/CMakeFiles/add.dir/build
+gmake[2]: Entering directory '/home/wind/cmakeClass/test_set_target_properties/build'
+[ 25%] Building CXX object src/CMakeFiles/add.dir/add.cpp.o
+cd /home/wind/cmakeClass/test_set_target_properties/build/src && /usr/bin/c++ -Dadd_EXPORTS -I/public -fPIC -fPIC -MD -MT src/CMakeFiles/add.dir/add.cpp.o -MF CMakeFiles/add.dir/add.cpp.o.d -o CMakeFiles/add.dir/add.cpp.o -c /home/wind/cmakeClass/test_set_target_properties/src/add.cpp
+[ 50%] Linking CXX shared library ../lib/libadd.so
+cd /home/wind/cmakeClass/test_set_target_properties/build/src && /usr/bin/cmake -E cmake_link_script CMakeFiles/add.dir/link.txt --verbose=1
+/usr/bin/c++ -fPIC -shared -Wl,-soname,libadd.so.20 -o ../lib/libadd.so.1.2.3 CMakeFiles/add.dir/add.cpp.o   -L/public  -Wl,-rpath,/home/wind/cmakeClass/test_set_target_properties/build/lib:/public -lcurl 
+cd /home/wind/cmakeClass/test_set_target_properties/build/src && /usr/bin/cmake -E cmake_symlink_library ../lib/libadd.so.1.2.3 ../lib/libadd.so.20 ../lib/libadd.so
+gmake[2]: Leaving directory '/home/wind/cmakeClass/test_set_target_properties/build'
+[ 50%] Built target add
+/usr/bin/gmake  -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/depend
+gmake[2]: Entering directory '/home/wind/cmakeClass/test_set_target_properties/build'
+cd /home/wind/cmakeClass/test_set_target_properties/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/wind/cmakeClass/test_set_target_properties /home/wind/cmakeClass/test_set_target_properties /home/wind/cmakeClass/test_set_target_properties/build /home/wind/cmakeClass/test_set_target_properties/build /home/wind/cmakeClass/test_set_target_properties/build/CMakeFiles/main.dir/DependInfo.cmake --color=
+gmake[2]: Leaving directory '/home/wind/cmakeClass/test_set_target_properties/build'
+/usr/bin/gmake  -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/build
+gmake[2]: Entering directory '/home/wind/cmakeClass/test_set_target_properties/build'
+[ 75%] Building CXX object CMakeFiles/main.dir/main.cpp.o
+/usr/bin/c++  -I/interface  -MD -MT CMakeFiles/main.dir/main.cpp.o -MF CMakeFiles/main.dir/main.cpp.o.d -o CMakeFiles/main.dir/main.cpp.o -c /home/wind/cmakeClass/test_set_target_properties/main.cpp
+[100%] Linking CXX executable main
+/usr/bin/cmake -E cmake_link_script CMakeFiles/main.dir/link.txt --verbose=1
+/usr/bin/c++ CMakeFiles/main.dir/main.cpp.o -o main   -L/interface  -Wl,-rpath,/interface:/home/wind/cmakeClass/test_set_target_properties/build/lib lib/libadd.so.1.2.3 -ljsoncpp 
+gmake[2]: Leaving directory '/home/wind/cmakeClass/test_set_target_properties/build'
+[100%] Built target main
+gmake[1]: Leaving directory '/home/wind/cmakeClass/test_set_target_properties/build'
+/usr/bin/cmake -E cmake_progress_start /home/wind/cmakeClass/test_set_target_properties/build/CMakeFiles 0
+[wind@Ubuntu build]$ 
+```
+
+我们看这一段
+
+```cmake
+[ 25%] Building CXX object src/CMakeFiles/add.dir/add.cpp.o
+cd /home/wind/cmakeClass/test_set_target_properties/build/src && /usr/bin/c++ -Dadd_EXPORTS -I/public -fPIC -fPIC -MD -MT src/CMakeFiles/add.dir/add.cpp.o -MF CMakeFiles/add.dir/add.cpp.o.d -o CMakeFiles/add.dir/add.cpp.o -c /home/wind/cmakeClass/test_set_target_properties/src/add.cpp
+```
+
+我们发现详细的编译选项, `-g  -O3`并没有出现, 这是因为不同版本的`cmake`对于 `COMPILE_OPTIONS`的属性处理方式有些不同, 首先需要说明的是, 无论哪个版本的`cmake`, 都是把`COMPILE_OPTIONS`后面的参数当做一个参数传给编译器, 所以你不能写成`COMPILE_OPTIONS "-g -O3 -fPIC"`, 所以在上面, 我们把它拆开写了, 但拆开写为什么只有`fPIC`这一个参数被传给`cmake`呢? 这是因为在`cmake 3.24 +`之前, `COMPILE_OPTIONS`是覆盖写的, 所以最后一个选项覆盖掉了前两个选项, `3.24 +`之后变成了合并写, 所以就能都被传递, 为了解决我们当前覆盖写的问题, 我们可以使用`target_compile_options`这个指令为编译器增加选项, 这也是`cmake`官方所推荐的写法.
+
+```cmake
+# 这次我们使用动态库
+add_library(add SHARED add.cpp)
+
+# 添加编译选项
+target_compile_options(add PRIVATE -g -O3 -fPIC)
+
+set_target_properties(add PROPERTIES
+
+        ## 目标属性
+
+            # 编译属性
+                INCLUDE_DIRECTORIES "/public"
+                INTERFACE_INCLUDE_DIRECTORIES "/interface"
+
+            # 链接属性
+                LINK_DIRECTORIES "/public"
+                INTERFACE_LINK_DIRECTORIES "/interface"
+                LINK_LIBRARIES "curl"
+                INTERFACE_LINK_LIBRARIES "jsoncpp"             # sudo apt install libjsoncpp-dev
+
+            # 输出属性
+                RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+                ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+                LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+
+            BUILD_RPATH "${CMAKE_BINARY_DIR}/lib"  # 为项目中的动态库文件临时链接提供方案, 这样就不需要将其安装到系统中
+
+        ## 安装属性
+            # 库在安装到系统后, BUILD_RPATH就会失效, 转而使用系统的安装路径
+            INSTALL_RPATH "lib" #  实际上就是/usr/local/lib
+            OUTPUT_NAME "add"
+            VERSION "1.2.3"
+            SOVERSION "20"      #  动态库的兼容版本, 描述库中所提供接口执行的标准, 为用户提供一种简便的验证接口是否还可用的方式
+)
+
+
+```
+
+```shell
+[wind@Ubuntu build]$ rm -rf ./*
+[wind@Ubuntu build]$ cmake ..
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/test_set_target_properties/build
+[wind@Ubuntu build]$ cmake --build . -v
+/usr/bin/cmake -S/home/wind/cmakeClass/test_set_target_properties -B/home/wind/cmakeClass/test_set_target_properties/build --check-build-system CMakeFiles/Makefile.cmake 0
+/usr/bin/cmake -E cmake_progress_start /home/wind/cmakeClass/test_set_target_properties/build/CMakeFiles /home/wind/cmakeClass/test_set_target_properties/build//CMakeFiles/progress.marks
+/usr/bin/gmake  -f CMakeFiles/Makefile2 all
+gmake[1]: Entering directory '/home/wind/cmakeClass/test_set_target_properties/build'
+/usr/bin/gmake  -f src/CMakeFiles/add.dir/build.make src/CMakeFiles/add.dir/depend
+gmake[2]: Entering directory '/home/wind/cmakeClass/test_set_target_properties/build'
+cd /home/wind/cmakeClass/test_set_target_properties/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/wind/cmakeClass/test_set_target_properties /home/wind/cmakeClass/test_set_target_properties/src /home/wind/cmakeClass/test_set_target_properties/build /home/wind/cmakeClass/test_set_target_properties/build/src /home/wind/cmakeClass/test_set_target_properties/build/src/CMakeFiles/add.dir/DependInfo.cmake --color=
+gmake[2]: Leaving directory '/home/wind/cmakeClass/test_set_target_properties/build'
+/usr/bin/gmake  -f src/CMakeFiles/add.dir/build.make src/CMakeFiles/add.dir/build
+gmake[2]: Entering directory '/home/wind/cmakeClass/test_set_target_properties/build'
+[ 25%] Building CXX object src/CMakeFiles/add.dir/add.cpp.o
+cd /home/wind/cmakeClass/test_set_target_properties/build/src && /usr/bin/c++ -Dadd_EXPORTS -I/public -fPIC -g -O3 -fPIC -MD -MT src/CMakeFiles/add.dir/add.cpp.o -MF CMakeFiles/add.dir/add.cpp.o.d -o CMakeFiles/add.dir/add.cpp.o -c /home/wind/cmakeClass/test_set_target_properties/src/add.cpp
+[ 50%] Linking CXX shared library ../lib/libadd.so
+cd /home/wind/cmakeClass/test_set_target_properties/build/src && /usr/bin/cmake -E cmake_link_script CMakeFiles/add.dir/link.txt --verbose=1
+/usr/bin/c++ -fPIC -shared -Wl,-soname,libadd.so.20 -o ../lib/libadd.so.1.2.3 CMakeFiles/add.dir/add.cpp.o   -L/public  -Wl,-rpath,/home/wind/cmakeClass/test_set_target_properties/build/lib:/public -lcurl 
+cd /home/wind/cmakeClass/test_set_target_properties/build/src && /usr/bin/cmake -E cmake_symlink_library ../lib/libadd.so.1.2.3 ../lib/libadd.so.20 ../lib/libadd.so
+gmake[2]: Leaving directory '/home/wind/cmakeClass/test_set_target_properties/build'
+[ 50%] Built target add
+/usr/bin/gmake  -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/depend
+gmake[2]: Entering directory '/home/wind/cmakeClass/test_set_target_properties/build'
+cd /home/wind/cmakeClass/test_set_target_properties/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/wind/cmakeClass/test_set_target_properties /home/wind/cmakeClass/test_set_target_properties /home/wind/cmakeClass/test_set_target_properties/build /home/wind/cmakeClass/test_set_target_properties/build /home/wind/cmakeClass/test_set_target_properties/build/CMakeFiles/main.dir/DependInfo.cmake --color=
+gmake[2]: Leaving directory '/home/wind/cmakeClass/test_set_target_properties/build'
+/usr/bin/gmake  -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/build
+gmake[2]: Entering directory '/home/wind/cmakeClass/test_set_target_properties/build'
+[ 75%] Building CXX object CMakeFiles/main.dir/main.cpp.o
+/usr/bin/c++  -I/interface  -MD -MT CMakeFiles/main.dir/main.cpp.o -MF CMakeFiles/main.dir/main.cpp.o.d -o CMakeFiles/main.dir/main.cpp.o -c /home/wind/cmakeClass/test_set_target_properties/main.cpp
+[100%] Linking CXX executable main
+/usr/bin/cmake -E cmake_link_script CMakeFiles/main.dir/link.txt --verbose=1
+/usr/bin/c++ CMakeFiles/main.dir/main.cpp.o -o main   -L/interface  -Wl,-rpath,/interface:/home/wind/cmakeClass/test_set_target_properties/build/lib lib/libadd.so.1.2.3 -ljsoncpp 
+gmake[2]: Leaving directory '/home/wind/cmakeClass/test_set_target_properties/build'
+[100%] Built target main
+gmake[1]: Leaving directory '/home/wind/cmakeClass/test_set_target_properties/build'
+/usr/bin/cmake -E cmake_progress_start /home/wind/cmakeClass/test_set_target_properties/build/CMakeFiles 0
+[wind@Ubuntu build]$ 
+
+```
+
+然后我们可以看到
+
+```shell
+[ 25%] Building CXX object src/CMakeFiles/add.dir/add.cpp.o
+cd /home/wind/cmakeClass/test_set_target_properties/build/src && /usr/bin/c++ -Dadd_EXPORTS -I/public -fPIC -g -O3 -fPIC -MD -MT src/CMakeFiles/add.dir/add.cpp.o -MF CMakeFiles/add.dir/add.cpp.o.d -o CMakeFiles/add.dir/add.cpp.o -c /home/wind/cmakeClass/test_set_target_properties/src/add.cpp
+```
+
+`-g -O3 -fPIC`都已经全部加上了, 并且, `-fPIC`默认也会带, 因此有两个. `-I/public`也验证了我们之前的说法.
+
+```shell
+/usr/bin/c++ -fPIC -shared -Wl,-soname,libadd.so.20 -o ../lib/libadd.so.1.2.3 CMakeFiles/add.dir/add.cpp.o   -L/public  -Wl,-rpath,/home/wind/cmakeClass/test_set_target_properties/build/lib:/public -lcurl 
+cd /home/wind/cmakeClass/test_set_target_properties/build/src && /usr/bin/cmake -E cmake_symlink_library ../lib/libadd.so.1.2.3 ../lib/libadd.so.20 ../lib/libadd.so
+```
+
+`-L/public`, 也在我们的设置中, `/home/wind/cmakeClass/test_set_target_properties/build/lib:/public`中的`/public`是库文件的输出路径.也就是`        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"`这一设置, `-rpath`, `rpath`其实就是描述从哪里可以找到动态库, 在安装之前, 其内容就是`BUILD_RPATH`, `-lcurl`也印证了`        LINK_LIBRARIES "curl"`, 
+
+这一段
+
+```shell
+[ 75%] Building CXX object CMakeFiles/main.dir/main.cpp.o
+/usr/bin/c++  -I/interface  -MD -MT CMakeFiles/main.dir/main.cpp.o -MF CMakeFiles/main.dir/main.cpp.o.d -o CMakeFiles/main.dir/main.cpp.o -c /home/wind/cmakeClass/test_set_target_properties/main.cpp
+```
+
+我们可以看到`-I/interface`
+
+```shell
+/usr/bin/cmake -E cmake_link_script CMakeFiles/main.dir/link.txt --verbose=1
+/usr/bin/c++ CMakeFiles/main.dir/main.cpp.o -o main   -L/interface  -Wl,-rpath,/interface:/home/wind/cmakeClass/test_set_target_properties/build/lib lib/libadd.so.1.2.3 -ljsoncpp 
+```
+
+可以看到`-L/interface  -rpath    -ljsoncpp `
+
+上述过程便体现了`cmake`基于目标的属性设置加属性传递的现代化构建系统的优点.
+
+-------------
+
+下面介绍`add_subdirectory`, 该函数的作用是添加子目录到构建树中, `cmake`会自动进入到源码树的子目录, 执行位于子目录中的`CMakeLists.txt` 基本形式为
+
+```cmake
+add_subdirectory(source_dir [binary_dir] [EXCLUDE_FROM_ALL] [SYSTEM])
+```
+
+`add_subdirectory`是`cmake`构建层次结构的递归入口, 在`cmake`中, 有构建树和源代码树的说法, 源代码树就是存放源代码的文件树, 而, 构建树, 就是存放构建目标的文件树.`cmake`会进入`add_subdirectory`所描述的子目录下, 执行其中的`CMakeLists.txt`文件.如果我们后续不修改生成目录的话, `cmake`就会仿照源代码树的结构生成与之对应的子目录用来存放中间文件及构建目标.
+
+子目录可以读取父目录下`set`(就是用户自定义)的变量, 也可以覆盖之后往下继续传递, 父目录则一般无法读取子目录下定义的变量, 除非使用`CACHE or PAPENT_SCOPE`.
+
+另外需要注意的是, 对于已经完成构建的目标, 在所有目录中都能被链接.
+
+下面, 我们对比`include`和`add_subdirectory`. `include`是把包含的脚本当做本目录的一部分立即执行, 而对于`add_subdirectory`来说, 则是进入一个新的目录作用域, 递归执行其中的`CMakeLists.txt`, 并为它构建相应的输出目录.
+
+对于`add_subdirectory`
+
+|          变量名          | 进入子目录后是否发生变化 |                 说明                 |
+| :----------------------: | :----------------------: | :----------------------------------: |
+| CMAKE_CURRENT_SOURCE_DIR |           变化           |       变为子目录的源代码树目录       |
+| CMAKE_CURRENT_BINARY_DIR |           变化           |        变为子目录的构建树目录        |
+| CMAKE_CURRENT_LIST_FILE  |           变化           | 变为子目录的CMakeLists.txt文件全路径 |
+|  CMAKE_CURRENT_LIST_DIR  |           变化           |  变为子目录的CMakeLists.txt文件目录  |
+
+对于`include`
+
+|          变量名          | 进入子目录后是否发生变化 |                 说明                 |
+| :----------------------: | :----------------------: | :----------------------------------: |
+| CMAKE_CURRENT_SOURCE_DIR |          不变化          |       还是父目录的源代码树目录       |
+| CMAKE_CURRENT_BINARY_DIR |          不变化          |        还是父目录的构建树目录        |
+| CMAKE_CURRENT_LIST_FILE  |           变化           | 变为子目录的CMakeLists.txt文件全路径 |
+|  CMAKE_CURRENT_LIST_DIR  |           变化           |  变为子目录的CMakeLists.txt文件目录  |
+
+下面, 我们就通过实际打印来观察现象. 
+
+我们就直接复用原先的`test_include`, 将其进行部分修改, 进行实验
+
+```shell
+[wind@Ubuntu test_add_sub_dir]$ tree .
+.
+├── build
+├── CMakeLists.txt
+├── sub
+│   └── CMakeLists.txt
+└── test.cpp
+
+2 directories, 3 files
+[wind@Ubuntu test_add_sub_dir]$ 
+```
+
+```cmake
+# 顶层CMakeLists.txt
+cmake_minimum_required(VERSION 3.18)
+
+project(TestInclude)
+
+add_executable(test test.cpp)
+
+include(GNUInstallDirs)
+install(TARGETS test)
+
+message(STATUS "from top-level CMakeLists.txt")
+
+# 打印源代码目录
+message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
+
+# 打印构建目录
+message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
+
+# 打印当前执行cmake脚本的完整名称
+message(STATUS "CMAKE_CURRENT_LIST_FILE: ${CMAKE_CURRENT_LIST_FILE}")
+
+# 打印当前执行cmake脚本的完整目录
+message(STATUS "CMAKE_CURRENT_LIST_DIR: ${CMAKE_CURRENT_LIST_DIR}")
+
+# 添加子目录
+add_subdirectory(sub)
+
+```
+
+```cpp
+// test.cpp
+#include<iostream>
+
+int main()
+{
+    return 0;
+}
+
+```
+
+```cmake
+# 子目录CMakeLists.txt
+message(STATUS "from sub/sub.cmake")
+
+# 打印源代码目录
+message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
+
+# 生成构建目录
+message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
+
+# 打印当前执行cmake脚本的完整名称
+message(STATUS "CMAKE_CURRENT_LIST_FILE: ${CMAKE_CURRENT_LIST_FILE}")
+
+# 打印当前执行cmake脚本的完整目录
+message(STATUS "CMAKE_CURRENT_LIST_DIR: ${CMAKE_CURRENT_LIST_DIR}")
+
+```
+
+```shell
+[wind@Ubuntu test_add_sub_dir]$ cd build
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- from top-level CMakeLists.txt
+-- CMAKE_CURRENT_SOURCE_DIR: /home/wind/cmakeClass/test_add_sub_dir
+-- CMAKE_CURRENT_BINARY_DIR: /home/wind/cmakeClass/test_add_sub_dir/build
+-- CMAKE_CURRENT_LIST_FILE: /home/wind/cmakeClass/test_add_sub_dir/CMakeLists.txt
+-- CMAKE_CURRENT_LIST_DIR: /home/wind/cmakeClass/test_add_sub_dir
+-- from sub/sub.cmake
+-- CMAKE_CURRENT_SOURCE_DIR: /home/wind/cmakeClass/test_add_sub_dir/sub
+-- CMAKE_CURRENT_BINARY_DIR: /home/wind/cmakeClass/test_add_sub_dir/build/sub
+-- CMAKE_CURRENT_LIST_FILE: /home/wind/cmakeClass/test_add_sub_dir/sub/CMakeLists.txt
+-- CMAKE_CURRENT_LIST_DIR: /home/wind/cmakeClass/test_add_sub_dir/sub
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/test_add_sub_dir/build
+[wind@Ubuntu build]$ cd ~/cmakeClass/test_include/build
+[wind@Ubuntu build]$ rm -rf ./*
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- from top-level CMakeLists.txt
+-- CMAKE_CURRENT_SOURCE_DIR: /home/wind/cmakeClass/test_include
+-- CMAKE_CURRENT_BINARY_DIR: /home/wind/cmakeClass/test_include/build
+-- CMAKE_CURRENT_LIST_FILE: /home/wind/cmakeClass/test_include/CMakeLists.txt
+-- CMAKE_CURRENT_LIST_DIR: /home/wind/cmakeClass/test_include
+-- from sub/sub.cmake
+-- CMAKE_CURRENT_SOURCE_DIR: /home/wind/cmakeClass/test_include
+-- CMAKE_CURRENT_BINARY_DIR: /home/wind/cmakeClass/test_include/build
+-- CMAKE_CURRENT_LIST_FILE: /home/wind/cmakeClass/test_include/sub/sub.cmake
+-- CMAKE_CURRENT_LIST_DIR: /home/wind/cmakeClass/test_include/sub
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/test_include/build
+[wind@Ubuntu build]$ 
+```
+
+这些目录常被用来进行辅助文件定位, 用相对路径的方式.
+
+---------
+
+下面, 我们穿插一下`cmake`内部库文件的生成和定位方式
+
+我们之前说过, 目标在`cmake`中的作用域是全局的, 引申我们在`Linux`中学习到的知识, `cmake`自身对于其中的各种目标也必然拥有系统性的管理机制. 实际上, 在`cmake`中有着专门描述目标的对象. 而这些对象中就包含着目标的种种属性. `cmake`真实通过对这些抽象目标对象的管理实现了对真实对象的管理.
+
+在实际开发过程中, 比如在我们之前对于静态库的生成, 我们看到, 我们并没有直接告诉`cmake`该去哪里找静态库, 但`cmake`还是自己找到并且成功链接了.这就牵扯到`cmake`对于目标对象的管理机制. 具体来说, 可以分为四步
+
+第一步.注册目标
+当用户`add`一个目标之后, `cmake`就会构建一个与之相对应的目标对象放入自己的全局容器中
+
+第二步.属性跟踪
+无论如何, 用户都是通过接口的方式更新目标属性的, 而对于`cmake`的底层目标属性接口来说, 它都会自动将用户传入的信息写入或更新到目标对象中, 对于用户没有修改的属性, 自然使用默认的缺省值.
+
+第三步.输出定位
+`cmake`配置阶段结束后, 进入生成阶段, 生成器会遍历所有的目标对象, 根据目标对象上的各类信息, 结合平台自身的特点, 确定最终的输出路径, 并将其也记录入目标对象中
+
+第四步:链接查询
+`cmake`会通过查询原有的目标对象, 定位它们的实际位置, 并生成与之对应的目标生成链接规则, 并转录到具体的`makefile`指令中 
+
+下面我们通过实际例子来验证上面的过程, 在其中, 我们会使用到配置生成阶段的一个生成器表达式, 用于获取目标的输出路径: `$<TARGET_FILE:tgt>`
+
+我们套用之前的`MyMath`项目
+
+```shell
+[wind@Ubuntu test_static_build_dir]$ tree .
+.
+├── app
+│   ├── CMakeLists.txt
+│   └── main.cpp
+├── build
+├── CMakeLists.txt
+└── my_lib
+    ├── CMakeLists.txt
+    ├── include
+    │   └── my_math.h
+    └── src
+        ├── add.cpp
+        └── sub.cpp
+
+5 directories, 7 files
+[wind@Ubuntu test_static_build_dir]$ 
+```
+
+```cmake
+# 搜集文件列表
+file(GLOB SRC_LISTS "*.cpp")
+
+# 构建目标
+add_executable(main ${SRC_LISTS})
+
+# 添加链接库列表
+target_link_libraries(main PRIVATE MyMath)
+
+set_target_properties(main PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
+# 输出静态库路径
+add_custom_command(                                             # 添加自定义命令
+    TARGET main POST_BUILD                                      # 在目标main生成后执行
+    COMMAND echo "输出静态库的全路径"                               
+    COMMAND ${CMAKE_COMMAND} -E echo "$<TARGET_FILE:MyMath>"    # CMAKE_COMMAND是cmake指令的安装路径, 打印目标MyMath的生成路径
+)
+```
+
+```shell
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/wind/cmakeClass/test_static_build_dir/build
+[wind@Ubuntu build]$ cmake --build .
+[ 20%] Building CXX object my_lib/CMakeFiles/MyMath.dir/src/add.cpp.o
+[ 40%] Building CXX object my_lib/CMakeFiles/MyMath.dir/src/sub.cpp.o
+[ 60%] Linking CXX static library ../lib/libMyMath.a
+[ 60%] Built target MyMath
+[ 80%] Building CXX object app/CMakeFiles/main.dir/main.cpp.o
+[100%] Linking CXX executable ../bin/main
+输出静态库的全路径
+/home/wind/cmakeClass/test_static_build_dir/build/lib/libMyMath.a
+[100%] Built target main
+[wind@Ubuntu build]$ 
+```
 
 # 完
