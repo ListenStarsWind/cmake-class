@@ -1,15 +1,14 @@
 # 这次我们使用动态库
 add_library(add SHARED add.cpp)
 
+# 添加编译选项
+target_compile_options(add PRIVATE -g -O3 -fPIC)
+
 set_target_properties(add PROPERTIES
 
         ## 目标属性
 
             # 编译属性
-                COMPILE_OPTIONS "-g"
-                COMPILE_OPTIONS "-O3"
-                COMPILE_OPTIONS "-fPIC"                  
-
                 INCLUDE_DIRECTORIES "/public"
                 INTERFACE_INCLUDE_DIRECTORIES "/interface"
 
