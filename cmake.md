@@ -2512,4 +2512,485 @@ add_custom_command(                                             # 添加自定�
 [wind@Ubuntu build]$ 
 ```
 
+---------------
+
+下面我们再详细说一下库的安装, 以使得其它用户可以使用`cmake`的`find_package`, 来查找并引用我们制作的静态库.
+
+我们使用`curl`作为我们的示例进行讲解.
+
+```shell
+git clone git@github.com:curl/curl.git
+cd curl
+mkdir build && cd build
+cmake .. -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX=/usr/local
+make -j$(nproc)
+sudo make install
+```
+
+当把`curl`的源代码克隆并构建安装后, 我们就会发现, `curl`在构建安装之后, 我们可以找到四个这样的文件
+
+```shell
+[wind@Ubuntu build]$ sudo updatedb 
+wind@Ubuntu build]$ locate curl.h
+/home/wind/curl/include/curl/curl.h
+/home/wind/curl/packages/OS400/ccsidcurl.h
+/usr/local/include/curl/curl.h
+[wind@Ubuntu build]$ locate libcurl.so
+/usr/lib/x86_64-linux-gnu/libcurl.so.4
+/usr/lib/x86_64-linux-gnu/libcurl.so.4.8.0
+/usr/local/lib/libcurl.so
+/usr/local/lib/libcurl.so.4
+/usr/local/lib/libcurl.so.4.8.0
+[wind@Ubuntu build]$ locate CURLConfig.cmake
+/home/wind/curl/build/generated/CURLConfig.cmake
+/usr/local/lib/cmake/CURL/CURLConfig.cmake
+[wind@Ubuntu build]$ locate CURLTargets.cmake
+/home/wind/curl/build/CMakeFiles/Export/8e83d16133499b505bf3986f4f209a65/CURLTargets.cmake
+/usr/local/lib/cmake/CURL/CURLTargets.cmake
+[wind@Ubuntu build]$
+```
+
+头文件和库文件就不说了, 我们要看的是两个安装到系统中的`cmake`脚本, 它们是我们在构建安装`curl`的时候, `cmake`依据源代码中的`CMakeLists.txt`自动为我们安装到系统中的. 它们指导下游的消费者该如何使用库文件. `find_package(CURL)`会读取`CURLConfig.cmake`, 它是入口性质的配置文件, 负责让`cmake`找到`CURLTargets.cmake`, 而`CURLTargets.cmake`又类似于使用模版, 会依据用户实际需求告诉用户如何使用`curl`.
+
+比如`CURLTargets.cmake`中可以看到对头文件所在目录的描述.
+
+```cmake
+# Create imported target CURL::libcurl_shared
+add_library(CURL::libcurl_shared SHARED IMPORTED)
+
+set_target_properties(CURL::libcurl_shared PROPERTIES
+  INTERFACE_INCLUDE_DIRECTORIES "${_IMPORT_PREFIX}/include"
+)
+
+```
+
+对于库文件, 由于用户可能有不同的需求, 比如`Debug/Release`的不同, 所以没有直接写, 而是让我们找`CURLTargets-*.cmake`这种文件
+
+```cmake
+file(GLOB _cmake_config_files "${CMAKE_CURRENT_LIST_DIR}/CURLTargets-*.cmake")
+foreach(_cmake_config_file IN LISTS _cmake_config_files)
+  include("${_cmake_config_file}")
+endforeach()
+```
+
+```shell
+[wind@Ubuntu build]$ ll /usr/local/lib/cmake/CURL
+total 24
+drwxr-xr-x 2 root root 4096 Sep  7 09:00 ./
+drwxr-xr-x 4 root root 4096 Sep  7 09:00 ../
+-rw-r--r-- 1 root root 3556 Sep  7 08:59 CURLConfig.cmake
+-rw-r--r-- 1 root root 3011 Sep  7 08:59 CURLConfigVersion.cmake
+-rw-r--r-- 1 root root 4004 Sep  7 08:59 CURLTargets.cmake
+-rw-r--r-- 1 root root 1218 Sep  7 08:59 CURLTargets-noconfig.cmake
+[wind@Ubuntu build]$ 
+```
+
+在这里就是`CURLTargets-noconfig.cmake`这个脚本
+
+```cmake
+# Import target "CURL::libcurl_shared" for configuration ""
+set_property(TARGET CURL::libcurl_shared APPEND PROPERTY IMPORTED_CONFIGURATIONS NOCONFIG)
+set_target_properties(CURL::libcurl_shared PROPERTIES
+  IMPORTED_LOCATION_NOCONFIG "${_IMPORT_PREFIX}/lib/libcurl.so.4.8.0"
+  IMPORTED_SONAME_NOCONFIG "libcurl.so.4"
+  )
+```
+
+这里就指定了库文件的位置
+
+对于使用方, 就可以使用`find_package`进行使用
+
+```cmake
+cmake_minimum_required(VERSION 3.18)
+project(curl_demo LANGUAGES CXX)
+
+# find_package会寻找安装的CURLConfig.cmake
+find_package(CURL CONFIG REQUIRED)
+
+add_executable(app main.cpp)
+
+# 官方 Config 包导出CURL::libcurl目标(旧版本可能叫CURL:curl)
+target_link_libraries(app PRIVATE CURL:libcurl)
+```
+
+在最后, `cmake`就会生成对于`GCC`的编译参数, 告诉`GCC`该包含什么头文件搜索目录, 又该去哪里找头文件
+
+----------
+
+下面, 我们站在发布者角度, 使用`cmake`发布一个简单的数学库到本机的公共目录中.
+
+```shell
+[wind@Ubuntu install_static_mymath]$ tree .
+.
+├── CMakeLists.txt
+└── my_lib
+    ├── CMakeLists.txt
+    ├── Config.cmake.in
+    ├── include
+    │   └── math.h
+    └── src
+        ├── add.cpp
+        └── sub.cpp
+
+4 directories, 6 files
+[wind@Ubuntu install_static_mymath]$
+```
+
+```cmake
+# 顶层CMakeLists.txt
+cmake_minimum_required(VERSION 3.18)
+
+project(InstallMyMath LANGUAGES CXX)
+
+add_subdirectory(my_lib)
+
+```
+
+```cmake
+# 子目录CMakeLists.txt
+# 收集源代码
+file(GLOB SRC_LISTS "src/*.cpp")
+
+# 添加构建目录
+add_library(MyMath STATIC ${SRC_LISTS})
+
+# 描述使用时的头文件寻找参考目录
+target_include_directories(MyMath INTERFACE 
+    # 使用生成器表达式描述路径 是cmake将目标安装后的include目录
+    # 也就是 usr/local/include
+    "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
+    # 安装后头文件实际存在的位置是 usr/local/include/MyMath
+    # 也就是说包含时是include(MyMath/XXX.h) 
+    # 所以target_include_directories描述的不是头文件根目录, 而是参考目录
+    # 这样做是为了形成类似命名域的形式, 防止冲突
+)
+
+# 设置库的输出目录
+set_target_properties(MyMath PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+)
+
+# 安装静态库
+include(GNUInstallDirs)
+
+# 对目标MyMath安装:
+install(TARGETS MyMath
+    # 导出集合 : 是一个描述目标各类属性的集合, 其中的信息由cmake自己跟踪维护, 无需手动设置
+    EXPORT MyMathTargets
+    # 安装的目的地: 库文件安装目录  /usr/local/lib
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+# 安装头文件
+install(DIRECTORY include/
+    # 安装到 usr/local/include/MyMath
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/MyMath
+    # 只将 include/ 下符合规则 "*.h"的文件安装
+    FILES_MATCHING PATTERN "*.h" 
+)
+
+# 将导出集合导出 到 构建树(构建目录)
+export(EXPORT MyMathTargets
+    FILE ${CMAKE_CURRENT_BINARY_DIR}/MyMathTargets.cmake
+)
+
+# 安装导出集合 到 安装树(安装目录)
+install(EXPORT MyMathTargets
+    FILE MyMathTargets.cmake
+    # 定义静态库命名域
+    NAMESPACE MyMath::
+    # 安装到  usr/local/lib/cmake/MyMath
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/MyMath
+)
+
+# 生成find_package需要的配置文件
+include(CMakePackageConfigHelpers)
+# 使用自定义模版进行生成
+configure_package_config_file(
+    # 描述模版路径
+    ${CMAKE_CURRENT_SOURCE_DIR}/Config.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/MyMathConfig.cmake
+    # 描述在何处可以找到这个脚本
+    INSTALL_DESTINATION "lib/cmake/MyMath"
+)
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/MyMathConfig.cmake
+    # 将脚本安装到指定目录
+    DESTINATION "lib/cmake/MyMath"
+)
+
+```
+
+```cmake
+# Config.cmake.in
+# 加载cmake包初始化脚本
+@PACKAGE_INIT@
+# 使用MyMathTargets.cmake中的信息生成MyMathConfig.cmake
+include(${CMAKE_CURRENT_LIST_DIR}/MyMathTargets.cmake)
+```
+
+```shell
+[wind@Ubuntu install_static_mymath]$ mkdir build && cd build
+[wind@Ubuntu build]$ cmake .. && cmake --build . && sudo cmake --install .
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done (0.5s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/install_static_mymath/build
+[ 33%] Building CXX object my_lib/CMakeFiles/MyMath.dir/src/add.cpp.o
+[ 66%] Building CXX object my_lib/CMakeFiles/MyMath.dir/src/sub.cpp.o
+[100%] Linking CXX static library ../lib/libMyMath.a
+[100%] Built target MyMath
+-- Install configuration: ""
+-- Installing: /usr/local/lib/libMyMath.a
+-- Up-to-date: /usr/local/include/MyMath
+-- Installing: /usr/local/include/MyMath/math.h
+-- Installing: /usr/local/lib/cmake/MyMath/MyMathTargets.cmake
+-- Installing: /usr/local/lib/cmake/MyMath/MyMathTargets-noconfig.cmake
+-- Installing: /usr/local/lib/cmake/MyMath/MyMathConfig.cmake
+[wind@Ubuntu build]$ 
+```
+
+当我们`find_package`时, `cmake`就会去`/usr/local/lib/cmake/MyMath/`路径下寻找`MyMathConfig.cmake`
+
+```cmake
+# 加载cmake包初始化脚本
+
+####### Expanded from @PACKAGE_INIT@ by configure_package_config_file() #######
+####### Any changes to this file will be overwritten by the next CMake run ####
+####### The input file was Config.cmake.in                            ########
+
+get_filename_component(PACKAGE_PREFIX_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../" ABSOLUTE)
+
+macro(set_and_check _var _file)
+  set(${_var} "${_file}")
+  if(NOT EXISTS "${_file}")
+    message(FATAL_ERROR "File or directory ${_file} referenced by variable ${_var} does not exist !")
+  endif()
+endmacro()
+
+macro(check_required_components _NAME)
+  foreach(comp ${${_NAME}_FIND_COMPONENTS})
+    if(NOT ${_NAME}_${comp}_FOUND)
+      if(${_NAME}_FIND_REQUIRED_${comp})
+        set(${_NAME}_FOUND FALSE)
+      endif()
+    endif()
+  endforeach()
+endmacro()
+
+####################################################################################
+# 使用MyMathTargets.cmake中的信息生成MyMathConfig.cmake
+include(${CMAKE_CURRENT_LIST_DIR}/MyMathTargets.cmake)
+```
+
+而`MyMathConfig.cmake`又会包含`MyMathTargets.cmake`, 与之前在`curl`上一样, 其内部又会导出目标并包含`MyMathTargets-*.cmak`
+
+```cmake
+# Create imported target MaMath::MyMath
+add_library(MaMath::MyMath STATIC IMPORTED)
+
+# Load information for each installed configuration.
+file(GLOB _cmake_config_files "${CMAKE_CURRENT_LIST_DIR}/MyMathTargets-*.cmake")
+foreach(_cmake_config_file IN LISTS _cmake_config_files)
+  include("${_cmake_config_file}")
+```
+
+这就匹配到了`MyMathTargets-noconfig.cmake`
+
+```cmake
+#----------------------------------------------------------------
+# Generated CMake target import file.
+#----------------------------------------------------------------
+
+# Commands may need to know the format version.
+set(CMAKE_IMPORT_FILE_VERSION 1)
+
+# Import target "MaMath::MyMath" for configuration ""
+set_property(TARGET MaMath::MyMath APPEND PROPERTY IMPORTED_CONFIGURATIONS NOCONFIG)
+set_target_properties(MaMath::MyMath PROPERTIES
+  IMPORTED_LINK_INTERFACE_LANGUAGES_NOCONFIG "CXX"
+  IMPORTED_LOCATION_NOCONFIG "${_IMPORT_PREFIX}/lib/libMyMath.a"
+  )
+
+list(APPEND _cmake_import_check_targets MaMath::MyMath )
+list(APPEND _cmake_import_check_files_for_MaMath::MyMath "${_IMPORT_PREFIX}/lib/libMyMath.a" )
+
+# Commands beyond this point should not need to know the version.
+set(CMAKE_IMPORT_FILE_VERSION)
+
+```
+
+----
+
+下面我们将作为软件的使用方, 使用上面我们所安装的数学库
+
+```shell
+[wind@Ubuntu test_MyMath]$ tree .
+.
+├── CMakeLists.txt
+└── main.cpp
+
+1 directory, 2 files
+[wind@Ubuntu test_MyMath]$ 
+```
+
+```cmake
+cmake_minimum_required(VERSION 3.18)
+
+project(main LANGUAGES CXX)
+
+add_executable(main main.cpp)
+
+find_package(MyMath CONFIG REQUIRED)
+
+target_link_libraries(main PRIVATE MyMath::MyMath)
+
+```
+
+```cpp
+#include<iostream>
+#include<MyMath/math.h>
+
+int main()
+{
+    std::cout << add(3,4) << std::endl;
+    std::cout << sub(3,4) << std::endl;
+    return 0;
+}
+```
+
+```shell
+[wind@Ubuntu test_MyMath]$ mkdir build && cd build
+[wind@Ubuntu build]$ cmake .. && cmake --build . -v
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done (0.6s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_MyMath/build
+Change Dir: '/home/wind/cmakeClass/test_MyMath/build'
+
+Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile
+/usr/bin/cmake -S/home/wind/cmakeClass/test_MyMath -B/home/wind/cmakeClass/test_MyMath/build --check-build-system CMakeFiles/Makefile.cmake 0
+/usr/bin/cmake -E cmake_progress_start /home/wind/cmakeClass/test_MyMath/build/CMakeFiles /home/wind/cmakeClass/test_MyMath/build//CMakeFiles/progress.marks
+/usr/bin/gmake  -f CMakeFiles/Makefile2 all
+gmake[1]: Entering directory '/home/wind/cmakeClass/test_MyMath/build'
+/usr/bin/gmake  -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/depend
+gmake[2]: Entering directory '/home/wind/cmakeClass/test_MyMath/build'
+cd /home/wind/cmakeClass/test_MyMath/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/wind/cmakeClass/test_MyMath /home/wind/cmakeClass/test_MyMath /home/wind/cmakeClass/test_MyMath/build /home/wind/cmakeClass/test_MyMath/build /home/wind/cmakeClass/test_MyMath/build/CMakeFiles/main.dir/DependInfo.cmake "--color="
+gmake[2]: Leaving directory '/home/wind/cmakeClass/test_MyMath/build'
+/usr/bin/gmake  -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/build
+gmake[2]: Entering directory '/home/wind/cmakeClass/test_MyMath/build'
+[ 50%] Building CXX object CMakeFiles/main.dir/main.cpp.o
+/usr/bin/c++    -MD -MT CMakeFiles/main.dir/main.cpp.o -MF CMakeFiles/main.dir/main.cpp.o.d -o CMakeFiles/main.dir/main.cpp.o -c /home/wind/cmakeClass/test_MyMath/main.cpp
+[100%] Linking CXX executable main
+/usr/bin/cmake -E cmake_link_script CMakeFiles/main.dir/link.txt --verbose=1
+/usr/bin/c++ CMakeFiles/main.dir/main.cpp.o -o main  /usr/local/lib/libMyMath.a 
+gmake[2]: Leaving directory '/home/wind/cmakeClass/test_MyMath/build'
+[100%] Built target main
+gmake[1]: Leaving directory '/home/wind/cmakeClass/test_MyMath/build'
+/usr/bin/cmake -E cmake_progress_start /home/wind/cmakeClass/test_MyMath/build/CMakeFiles 0
+
+[wind@Ubuntu build]$ 
+
+```
+
+我们看到在`Linking`的时候, 有`/usr/bin/c++ CMakeFiles/main.dir/main.cpp.o -o main  /usr/local/lib/libMyMath.a `, 也就是成功找到了我们的数学库
+
+但我们没看到头文件的`-I`, 这是因为`/usr/local/include`是编译器默认寻找的路径, 所以不需要额外添加
+
+```shell
+[wind@Ubuntu build]$ g++ -v -x c++ -E /dev/null
+Using built-in specs.
+COLLECT_GCC=g++
+OFFLOAD_TARGET_NAMES=nvptx-none:amdgcn-amdhsa
+OFFLOAD_TARGET_DEFAULT=1
+Target: x86_64-linux-gnu
+Configured with: ../src/configure -v --with-pkgversion='Ubuntu 13.3.0-6ubuntu2~24.04' --with-bugurl=file:///usr/share/doc/gcc-13/README.Bugs --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++,m2 --prefix=/usr --with-gcc-major-version-only --program-suffix=-13 --program-prefix=x86_64-linux-gnu- --enable-shared --enable-linker-build-id --libexecdir=/usr/libexec --without-included-gettext --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-bootstrap --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes --with-default-libstdcxx-abi=new --enable-libstdcxx-backtrace --enable-gnu-unique-object --disable-vtable-verify --enable-plugin --enable-default-pie --with-system-zlib --enable-libphobos-checking=release --with-target-system-zlib=auto --enable-objc-gc=auto --enable-multiarch --disable-werror --enable-cet --with-arch-32=i686 --with-abi=m64 --with-multilib-list=m32,m64,mx32 --enable-multilib --with-tune=generic --enable-offload-targets=nvptx-none=/build/gcc-13-fG75Ri/gcc-13-13.3.0/debian/tmp-nvptx/usr,amdgcn-amdhsa=/build/gcc-13-fG75Ri/gcc-13-13.3.0/debian/tmp-gcn/usr --enable-offload-defaulted --without-cuda-driver --enable-checking=release --build=x86_64-linux-gnu --host=x86_64-linux-gnu --target=x86_64-linux-gnu --with-build-config=bootstrap-lto-lean --enable-link-serialization=2
+Thread model: posix
+Supported LTO compression algorithms: zlib zstd
+gcc version 13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04) 
+COLLECT_GCC_OPTIONS='-v' '-E' '-shared-libgcc' '-mtune=generic' '-march=x86-64'
+ /usr/libexec/gcc/x86_64-linux-gnu/13/cc1plus -E -quiet -v -imultiarch x86_64-linux-gnu -D_GNU_SOURCE /dev/null -mtune=generic -march=x86-64 -fasynchronous-unwind-tables -fstack-protector-strong -Wformat -Wformat-security -fstack-clash-protection -fcf-protection -dumpbase null
+ignoring duplicate directory "/usr/include/x86_64-linux-gnu/c++/13"
+ignoring nonexistent directory "/usr/local/include/x86_64-linux-gnu"
+ignoring nonexistent directory "/usr/lib/gcc/x86_64-linux-gnu/13/include-fixed/x86_64-linux-gnu"
+ignoring nonexistent directory "/usr/lib/gcc/x86_64-linux-gnu/13/include-fixed"
+ignoring nonexistent directory "/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/include"
+#include "..." search starts here:
+#include <...> search starts here:
+ /usr/include/c++/13
+ /usr/include/x86_64-linux-gnu/c++/13
+ /usr/include/c++/13/backward
+ /usr/lib/gcc/x86_64-linux-gnu/13/include
+ /usr/local/include
+ /usr/include/x86_64-linux-gnu
+ /usr/include
+End of search list.
+# 0 "/dev/null"
+# 0 "<built-in>"
+# 0 "<command-line>"
+# 1 "/usr/include/stdc-predef.h" 1 3 4
+# 0 "<command-line>" 2
+# 1 "/dev/null"
+COMPILER_PATH=/usr/libexec/gcc/x86_64-linux-gnu/13/:/usr/libexec/gcc/x86_64-linux-gnu/13/:/usr/libexec/gcc/x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/13/:/usr/lib/gcc/x86_64-linux-gnu/
+LIBRARY_PATH=/usr/lib/gcc/x86_64-linux-gnu/13/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../../lib/:/lib/x86_64-linux-gnu/:/lib/../lib/:/usr/lib/x86_64-linux-gnu/:/usr/lib/../lib/:/usr/lib/gcc/x86_64-linux-gnu/13/../../../:/lib/:/usr/lib/
+COLLECT_GCC_OPTIONS='-v' '-E' '-shared-libgcc' '-mtune=generic' '-march=x86-64'
+[wind@Ubuntu build]$ 
+```
+
+我们看到`/usr/local/include`赫然在列
+
+最后考虑到实验已经完成了, 那么我们就把自己的库从系统中卸载
+
+```shell
+[wind@Ubuntu build]$ pwd
+/home/wind/cmakeClass/install_static_mymath/build
+[wind@Ubuntu build]$ cat install_manifest.txt | xargs sudo rm -v
+removed '/usr/local/lib/libMyMath.a'
+removed '/usr/local/include/MyMath/math.h'
+removed '/usr/local/lib/cmake/MyMath/MyMathTargets.cmake'
+removed '/usr/local/lib/cmake/MyMath/MyMathTargets-noconfig.cmake'
+removed '/usr/local/lib/cmake/MyMath/MyMathConfig.cmake'
+[wind@Ubuntu build]$ 
+```
+
+------
+
+下面, 我们重点介绍在上述安装过程中, 我们使用到的两个最核心的接口 `export`和`install`, 下面我们看看这两个指令是如何相互配合的.
+
+整体来说, 比较简单, 其实就分为两步, (Foo指的是项目名)
+
+- 第一步, 使用export 导出目标到 FooTargets.cmake文件
+- 第二步, 将FooTargets.cmake安装到/usr/local/cmake/Foo/FooTargets.cmake
+
+我们意识到, 对于目标来说, 它有很多属性, 让其交给目标的使用者来进行包含是不可靠的, 是不利于目标之间的传播的, 所以我们通过所谓的导出集合, 来将目标在构建过程中的目标属性一一收集, 并将其加一归档, 输出到一个文件当中, 并最终安装到系统中, 这样当用户需要使用目标, 就不必要太多操作, 直接使用`find_package`就相当于在自己的脚本中包含了所使用目标的各类属性.
+
+在上面的脚本中
+
+```cmake
+EXPORT MyMathTargets
+```
+
+就是对目标`MyMath`定义了一个导出集合, 于是导出集合就会自动追踪并记录这个目标的各类属性,
+
+```cmake
+export(EXPORT MyMathTargets
+    FILE ${CMAKE_CURRENT_BINARY_DIR}/MyMathTargets.cmake
+)
+```
+
+在构建完成后, 我们便把收集到到目标属性输出到构建树的`MyMathTargets.cmake`中
+
+但此时构建树中的`MyMathTargets.cmake`只有目标属性, 没有安装属性, 没有安装属性的一个问题就是找不到安装到本地的目标, 所以在我们安装`MyMathTargets.cmake`的时候, 即把它从构建树安装到本地的时候, `cmake`会追加目标的安装属性, 这样, 最终, 本地安装的`MyMathTargets.cmake`也有安装属性.
+
 # 完
