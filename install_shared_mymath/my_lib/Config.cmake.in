@@ -1,0 +1,4 @@
+# 加载cmake包初始化脚本
+@PACKAGE_INIT@
+# 使用MyMathTargets.cmake中的信息生成MyMathConfig.cmake
+include(${CMAKE_CURRENT_LIST_DIR}/MyMathTargets.cmake)
