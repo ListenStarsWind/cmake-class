@@ -2993,4 +2993,198 @@ export(EXPORT MyMathTargets
 
 但此时构建树中的`MyMathTargets.cmake`只有目标属性, 没有安装属性, 没有安装属性的一个问题就是找不到安装到本地的目标, 所以在我们安装`MyMathTargets.cmake`的时候, 即把它从构建树安装到本地的时候, `cmake`会追加目标的安装属性, 这样, 最终, 本地安装的`MyMathTargets.cmake`也有安装属性.
 
+----------
+
+在上面的过程中, 我们学习了关于静态库的安装过程. 接下来我们将开始学习动态库的安装. 在正式进行学习之前, 我们先简要提一下有关动态库和静态库的区别.
+
+其实, 在之前学习Linux的时候, 我们就已经对动静态库进行了专门的学习. 我们知道, 在生成阶段, 静态库生成`.o`是不需要带上与地址无关码, 即`-fPIC`选项, 而动态库则需要, 我们知道, 这是因为可执行程序对于动静态库的使用方式存在差异, 为了防止可执行程序在使用动态库时出现虚拟地址冲突, 动态库的地址采用的是不按照进程地址空间布局的那样的逻辑地址, 而是采用一种偏移量地址, 或者说是一种相对地址, 从而避免了与绝对地址(逻辑的)无关,  而在链接阶段, 静态库直接拷贝到可执行文件中, 动态库则是运行时触发缺页中断, 让动态链接器将动态库加载到内存当中进行使用. 动态库的优点是可以热更新, 缺点是有依赖关系.
+
+插入: vcpkg是一个由微软维护的跨平台C/C++包管理器, 它可以使得第三方库的获取, 编译, 安装与集成像Python的pip或JaveScript的npm一样简单, 这尤其弥补了在Windows生态下"系统级包管理器"的缺失. 它是`cmake`上游, 也提供`.cmake`脚本.
+
+对于具体的安装过程, 我们直接复用之前静态库的安装
+
+```cmake
+# 收集源代码
+file(GLOB SRC_LISTS "src/*.cpp")
+
+# 添加构建目录
+add_library(MyMath SHARED ${SRC_LISTS})
+
+# 描述使用时的头文件寻找参考目录
+target_include_directories(MyMath INTERFACE 
+    # 使用生成器表达式描述路径 是cmake将目标安装后的include目录
+    # 也就是 usr/local/include
+    "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
+    # 安装后头文件实际存在的位置是 usr/local/include/MyMath
+    # 也就是说包含时是include(MyMath/XXX.h) 
+    # 所以target_include_directories描述的不是头文件根目录, 而是参考目录
+    # 这样做是为了形成类似命名域的形式, 防止冲突
+)
+
+# 设置库的输出目录
+set_target_properties(MyMath PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+    OUTPUT_NAME MyMath
+    VERSION 1.2.3
+    SOVERSION 20
+)
+# 安装动态库
+include(GNUInstallDirs)
+
+# 对目标MyMath安装:
+install(TARGETS MyMath
+    # 导出集合 : 是一个描述目标各类属性的集合, 其中的信息由cmake自己跟踪维护, 无需手动设置
+    EXPORT MyMathTargets
+    # 安装的目的地: 库文件安装目录  /usr/local/lib
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+# 安装头文件
+install(DIRECTORY include/
+    # 安装到 usr/local/include/MyMath
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/MyMath
+    # 只将 include/ 下符合规则 "*.h"的文件安装
+    FILES_MATCHING PATTERN "*.h" 
+)
+
+# 将导出集合导出 到 构建树(构建目录)
+export(EXPORT MyMathTargets
+    FILE ${CMAKE_CURRENT_BINARY_DIR}/MyMathTargets.cmake
+)
+
+# 安装导出集合 到 安装树(安装目录)
+install(EXPORT MyMathTargets
+    FILE MyMathTargets.cmake
+    # 定义动态库命名域
+    NAMESPACE MyMath::
+    # 安装到  usr/local/lib/cmake/MyMath
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/MyMath
+)
+
+# 生成find_package需要的配置文件
+include(CMakePackageConfigHelpers)
+# 使用自定义模版进行生成
+configure_package_config_file(
+    # 描述模版路径
+    ${CMAKE_CURRENT_SOURCE_DIR}/Config.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/MyMathConfig.cmake
+    # 描述在何处可以找到这个脚本
+    INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/MyMath"
+)
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/MyMathConfig.cmake
+    # 将脚本安装到指定目录
+    DESTINATION "lib/cmake/MyMath"
+)
+
+```
+
+只有本文件有稍微的改变, 包括库的类型, 匹配类型的输出路径, 加点动态库的版本兼容版本, 其它几乎都不需要修改, 使用方由于使用的是`find_package`, 所以也不需要修改
+
+```shell
+[wind@Ubuntu build]$ cmake .. && cmake --build . && sudo cmake --install .
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done (0.5s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/install_shared_mymath/build
+[ 33%] Building CXX object my_lib/CMakeFiles/MyMath.dir/src/add.cpp.o
+[ 66%] Building CXX object my_lib/CMakeFiles/MyMath.dir/src/sub.cpp.o
+[100%] Linking CXX shared library ../lib/libMyMath.so
+[100%] Built target MyMath
+[sudo] password for wind: 
+-- Install configuration: ""
+-- Installing: /usr/local/lib/libMyMath.so.1.2.3
+-- Installing: /usr/local/lib/libMyMath.so.20
+-- Installing: /usr/local/lib/libMyMath.so
+-- Up-to-date: /usr/local/include/MyMath
+-- Installing: /usr/local/include/MyMath/math.h
+-- Installing: /usr/local/lib/cmake/MyMath/MyMathTargets.cmake
+-- Installing: /usr/local/lib/cmake/MyMath/MyMathTargets-noconfig.cmake
+-- Installing: /usr/local/lib/cmake/MyMath/MyMathConfig.cmake
+[wind@Ubuntu build]$ cd /home/wind/cmakeClass/test_MyMath/build
+[wind@Ubuntu build]$ rm -rf ./*
+[wind@Ubuntu build]$ cmake .. && cmake --build .
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done (0.6s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_MyMath/build
+[ 50%] Building CXX object CMakeFiles/main.dir/main.cpp.o
+[100%] Linking CXX executable main
+[100%] Built target main
+[wind@Ubuntu build]$ ls
+CMakeCache.txt  CMakeFiles  cmake_install.cmake  main  Makefile
+[wind@Ubuntu build]$ ./main
+7
+-1
+[wind@Ubuntu build]$ cd -
+/home/wind/cmakeClass/install_shared_mymath/build
+[wind@Ubuntu build]$ cat install_manifest.txt | xargs sudo rm -v
+removed '/usr/local/lib/libMyMath.so.1.2.3'
+removed '/usr/local/lib/libMyMath.so.20'
+removed '/usr/local/lib/libMyMath.so'
+removed '/usr/local/include/MyMath/math.h'
+removed '/usr/local/lib/cmake/MyMath/MyMathTargets.cmake'
+removed '/usr/local/lib/cmake/MyMath/MyMathTargets-noconfig.cmake'
+removed '/usr/local/lib/cmake/MyMath/MyMathConfig.cmake'
+[wind@Ubuntu build]$ 
+```
+
+稍微提一下, 对于`-fPIC`选项, `cmake`从`2.8.9`版本后对于动态库就会自动携带该选项, 所以, 对于我们当前的版本来说, 不需要手动添加.
+
+---------
+
+下面介绍`cmake`内部动态库的生成和定位流程
+
+对于Linux来说, 当一个进程在进程地址空间里找不到所需动态库的物理地址时, 就会触发缺页中断, 从而"叫来"Linux中的动态链接加载器, 要求其将所需的动态库加载到物理内存中, 并与页表建立映射关系, 此时, 动态加载器会到以下几个地方喊顺序去寻找动态库或者其路径
+
+- LD_LIBRARY_PATH 环境变量中列出的目录
+- ELF 文件的 DT_RUNPATH
+- 系统缓存/etc/ld.so.cache
+- 默认目录, /lib, /usr/lib...
+
+先在`LD_LIBRARY_PATH`里面找, 找所需库的绝对路径, 找不到去`DT_RUNPATH`
+
+对于 ELF 文件来说, 它可能会自带所需动态库的路径, 比如刚刚我们生成的`main`
+
+```shell
+[wind@Ubuntu build]$ readelf -d main
+
+Dynamic section at offset 0x2d78 contains 30 entries:
+  Tag        Type                         Name/Value
+ 0x0000000000000001 (NEEDED)             Shared library: [libMyMath.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libstdc++.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000001d (RUNPATH)            Library runpath: [/usr/local/lib]
+```
+
+其中就指明了库的查找路径是`/usr/local/lib`, 如果还找不到, 就去查找`/etc/ld.so.cache`
+
+`/etc/ld.so.cache`是一个缓存文件, 其内部类似哈希表, 直接记录着 库名 - 绝对路径, 它的使用方式是由用户在合适的时间执行`sudo ldconfig`,(或者安装删除动态库) 时, 系统会进行全盘扫描(安装卸载动态库也是全盘), 将扫描到的库和绝对路径写入该文件. `ldconfig -p`可以查看它的具体内容, 而且由于是缓存文件, 在内存中存储, 所以在使用时不涉及对应的物理动作
+
+最后, 就是在默认目录下, 逐一扫描.
+
+对于`cmake`来说, 它使用第二种, 也就是直接把所需库的目录写到可执行文件本身上. 我们可以从之前的一些指令片段上看到这一点
+
+```shell
+[100%] Linking CXX executable main
+/usr/bin/cmake -E cmake_link_script CMakeFiles/main.dir/link.txt --verbose=1
+/usr/bin/c++ CMakeFiles/main.dir/main.cpp.o -o main   -L/usr/local/lib/public  -L/usr/local/lib/interface  -Wl,-rpath,/usr/local/lib/public:/usr/local/lib/interface src/libadd.a -lpthread 
+
+```
+
+我们看到, 有一个`-Wl,-rpath`选项, 这个选项的含义就是让编译器把后面的那段路径直接写到可执行文件中. 链接时直接用这段路径找库文件. 这种ELF文件自带的路径, 一般被叫做`rpath`, 另外要说的一点是, ELF里面有两种搜索路径标签, 老版本的`DT_RPATH`和新版本的`DT_RUNPATH`.
+
+对于`cmake`, `rpath`的路径会分时期变化. 在项目构建阶段, `rpath`是`CMAKE_BUILD_RPATH`, 我曾经说过, 对该属性的设置是为了让可执行目标即使在库文件没有安装的情况下, 仍能运行. 而如果把库给安装了, 那么`rpath`就会变成`CMAKE_INSTALL_RPATH`. 具体来说, 在同一个项目中, 如果我生成了一些动态库目标, 而最终的可执行程序也依赖于这个动态库, 那么, 如果你压根没写库文件安装, 那么它就一直把`CMAKE_BUILD_RPATH`作为`rpath`, 如果你写了库安装, 那么在安装时, `cmake`就会在原先的可执行程序上修改, 把`rpath`改成库安装的目录, 也就是`CMAKE_INSTALL_RPATH`.  如果库和可执行文件压根不在一个项目里, 那么`cmake`会直接把`find_package`找到的库目录当做`rpath`. `cmake`也提供了一些设置可以让用户接手`rpath`的具体设置, 不过实际过程中, 我们不会这样用, 所以我们不说.
+
 # 完
