@@ -3187,4 +3187,485 @@ Dynamic section at offset 0x2d78 contains 30 entries:
 
 对于`cmake`, `rpath`的路径会分时期变化. 在项目构建阶段, `rpath`是`CMAKE_BUILD_RPATH`, 我曾经说过, 对该属性的设置是为了让可执行目标即使在库文件没有安装的情况下, 仍能运行. 而如果把库给安装了, 那么`rpath`就会变成`CMAKE_INSTALL_RPATH`. 具体来说, 在同一个项目中, 如果我生成了一些动态库目标, 而最终的可执行程序也依赖于这个动态库, 那么, 如果你压根没写库文件安装, 那么它就一直把`CMAKE_BUILD_RPATH`作为`rpath`, 如果你写了库安装, 那么在安装时, `cmake`就会在原先的可执行程序上修改, 把`rpath`改成库安装的目录, 也就是`CMAKE_INSTALL_RPATH`.  如果库和可执行文件压根不在一个项目里, 那么`cmake`会直接把`find_package`找到的库目录当做`rpath`. `cmake`也提供了一些设置可以让用户接手`rpath`的具体设置, 不过实际过程中, 我们不会这样用, 所以我们不说.
 
+---------
+
+接下来我们比较一下`find_package`的两种模式, `modlue and  config`
+
+`modlue`又叫做查找模式, 是给那些太老以至于没有进行`cmake`适配, 以及没有安装含有`config.cmake`等`cmake`配置文件的发行版进行使用的. `config`则是`cmake`推荐的模式, 由库的发布者直接提供库文件的定位以及使用信息, 下游不需要手动编写脚本, 直接使用上游提供好的导入目标进行使用.
+
+在`modlue`模式下, 我们需要手动编写脚本, 去使用`find_library , find_path`等接口在磁盘中扫描(其实也不需要自己编写, 因为`cmake`的`modlue`模块往往已经自带了很多高质量的Find脚本), 在实际使用中, 除了上述的Find脚本外, 我们也需要手动添加头文件包含目录
+
+```cmake
+find_package(PNG REQUIRED)
+target_include_directories(app PRIVATE /usr/local/include/....)
+target_link_libraries(app RIVATE /isr/local/lib/...)
+```
+
+鉴于`moudlue`和`config`的工作模式, 有时我们也把`modlue`叫做"猜模式", 因为我们并不是库的发行方, 所以对于库文件的具体位置及属性类似于猜出来的., `config`就被叫做"定位模式", 因为这是库的发行者自己提供的, 他们当然清楚自己的库会往哪里安装, 有哪些属性.
+
+对于`find_package`来说, 其默认行为, 也就是没有指定模式的时候, 会率先尝试`config`, 然后是`modlue`.
+
+对于包的一些规范, 在行业内也有一定的规范. 对于绝大多数的库来说, 其命名一般是首字母大写, 比如`Boost, OpenCV Threads`, 当然也存在一些特殊情况, 比如`jsoncpp, CURL`. 对于`config.cmake`那些`config`模式依赖文件的具体位置, 都是在`/usr/local/lib/cmake/...`,, `modlue`所需要的`Find.cmake`比如`FindBoost.cmake` , 则会出现在`/usr/share/cmake-x.x/Modules/`目录下.
+
+-------
+
+接下来, 我们下载并安装一下`jsoncpp`
+
+```shell
+[wind@Ubuntu ~]$ git clone git@github.com:open-source-parsers/jsoncpp.git
+[wind@Ubuntu ~]$ cd jsoncpp
+[wind@Ubuntu jsoncpp]$ mkdir build && cd build
+[wind@Ubuntu build]$ cmake ..
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- JsonCpp Version: 1.9.7
+-- Looking for memset_s
+-- Looking for memset_s - not found
+-- Looking for C++ include clocale
+-- Looking for C++ include clocale - found
+-- Looking for localeconv
+-- Looking for localeconv - found
+-- Looking for C++ include sys/types.h
+-- Looking for C++ include sys/types.h - found
+-- Looking for C++ include stdint.h
+-- Looking for C++ include stdint.h - found
+-- Looking for C++ include stddef.h
+-- Looking for C++ include stddef.h - found
+-- Check size of lconv
+-- Check size of lconv - done
+-- Performing Test HAVE_DECIMAL_POINT
+-- Performing Test HAVE_DECIMAL_POINT - Success
+-- Found Python3: /usr/bin/python3 (found version "3.12.3") found components: Interpreter 
+-- Configuring done (2.8s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/jsoncpp/build
+[wind@Ubuntu build]$ cmake --build .
+[  5%] Building CXX object src/lib_json/CMakeFiles/jsoncpp_lib.dir/json_reader.cpp.o
+[ 11%] Building CXX object src/lib_json/CMakeFiles/jsoncpp_lib.dir/json_value.cpp.o
+[ 17%] Building CXX object src/lib_json/CMakeFiles/jsoncpp_lib.dir/json_writer.cpp.o
+[ 23%] Linking CXX shared library ../../lib/libjsoncpp.so
+[ 23%] Built target jsoncpp_lib
+[ 29%] Building CXX object src/lib_json/CMakeFiles/jsoncpp_static.dir/json_reader.cpp.o
+[ 35%] Building CXX object src/lib_json/CMakeFiles/jsoncpp_static.dir/json_value.cpp.o
+[ 41%] Building CXX object src/lib_json/CMakeFiles/jsoncpp_static.dir/json_writer.cpp.o
+[ 47%] Linking CXX static library ../../lib/libjsoncpp.a
+[ 47%] Built target jsoncpp_static
+[ 52%] Building CXX object src/lib_json/CMakeFiles/jsoncpp_object.dir/json_reader.cpp.o
+[ 58%] Building CXX object src/lib_json/CMakeFiles/jsoncpp_object.dir/json_value.cpp.o
+[ 64%] Building CXX object src/lib_json/CMakeFiles/jsoncpp_object.dir/json_writer.cpp.o
+[ 64%] Built target jsoncpp_object
+[ 70%] Building CXX object src/jsontestrunner/CMakeFiles/jsontestrunner_exe.dir/main.cpp.o
+[ 76%] Linking CXX executable ../../bin/jsontestrunner_exe
+[ 76%] Built target jsontestrunner_exe
+[ 82%] Building CXX object src/test_lib_json/CMakeFiles/jsoncpp_test.dir/jsontest.cpp.o
+[ 88%] Building CXX object src/test_lib_json/CMakeFiles/jsoncpp_test.dir/fuzz.cpp.o
+[ 94%] Building CXX object src/test_lib_json/CMakeFiles/jsoncpp_test.dir/main.cpp.o
+[100%] Linking CXX executable ../../bin/jsoncpp_test
+Testing ValueTest/checkNormalizeFloatingPointStr: OK
+Testing ValueTest/memberCount: OK
+Testing ValueTest/objects: OK
+Testing ValueTest/arrays: OK
+Testing ValueTest/resizeArray: OK
+Testing ValueTest/resizePopulatesAllMissingElements: OK
+Testing ValueTest/getArrayValue: OK
+Testing ValueTest/arrayIssue252: OK
+Testing ValueTest/arrayInsertAtRandomIndex: OK
+Testing ValueTest/null: OK
+Testing ValueTest/strings: OK
+Testing ValueTest/bools: OK
+Testing ValueTest/integers: OK
+Testing ValueTest/nonIntegers: OK
+Testing ValueTest/compareNull: OK
+Testing ValueTest/compareInt: OK
+Testing ValueTest/compareUInt: OK
+Testing ValueTest/compareDouble: OK
+Testing ValueTest/compareString: OK
+Testing ValueTest/compareBoolean: OK
+Testing ValueTest/compareArray: OK
+Testing ValueTest/compareObject: OK
+Testing ValueTest/compareType: OK
+Testing ValueTest/CopyObject: OK
+Testing ValueTest/typeChecksThrowExceptions: OK
+Testing ValueTest/offsetAccessors: OK
+Testing ValueTest/StaticString: OK
+Testing ValueTest/WideString: OK
+Testing ValueTest/CommentBefore: OK
+Testing ValueTest/zeroes: OK
+Testing ValueTest/zeroesInKeys: OK
+Testing ValueTest/specialFloats: OK
+Testing ValueTest/precision: OK
+Testing ValueTest/searchValueByPath: OK
+Testing FastWriterTest/dropNullPlaceholders: OK
+Testing FastWriterTest/enableYAMLCompatibility: OK
+Testing FastWriterTest/omitEndingLineFeed: OK
+Testing FastWriterTest/writeNumericValue: OK
+Testing FastWriterTest/writeArrays: OK
+Testing FastWriterTest/writeNestedObjects: OK
+Testing StyledWriterTest/writeNumericValue: OK
+Testing StyledWriterTest/writeArrays: OK
+Testing StyledWriterTest/writeNestedObjects: OK
+Testing StyledWriterTest/multiLineArray: OK
+Testing StyledWriterTest/writeValueWithComment: OK
+Testing StyledStreamWriterTest/writeNumericValue: OK
+Testing StyledStreamWriterTest/writeArrays: OK
+Testing StyledStreamWriterTest/writeNestedObjects: OK
+Testing StyledStreamWriterTest/multiLineArray: OK
+Testing StyledStreamWriterTest/writeValueWithComment: OK
+Testing StreamWriterTest/writeNumericValue: OK
+Testing StreamWriterTest/writeArrays: OK
+Testing StreamWriterTest/writeNestedObjects: OK
+Testing StreamWriterTest/multiLineArray: OK
+Testing StreamWriterTest/dropNullPlaceholders: OK
+Testing StreamWriterTest/enableYAMLCompatibility: OK
+Testing StreamWriterTest/indentation: OK
+Testing StreamWriterTest/writeZeroes: OK
+Testing StreamWriterTest/unicode: OK
+Testing StreamWriterTest/escapeControlCharacters: OK
+Testing ReaderTest/parseWithNoErrors: OK
+Testing ReaderTest/parseObject: OK
+Testing ReaderTest/parseArray: OK
+Testing ReaderTest/parseString: OK
+Testing ReaderTest/parseComment: OK
+Testing ReaderTest/streamParseWithNoErrors: OK
+Testing ReaderTest/parseWithNoErrorsTestingOffsets: OK
+Testing ReaderTest/parseWithOneError: OK
+Testing ReaderTest/parseSpecialFloat: OK
+Testing ReaderTest/strictModeParseNumber: OK
+Testing ReaderTest/parseChineseWithOneError: OK
+Testing ReaderTest/parseWithDetailError: OK
+Testing ReaderTest/pushErrorTest: OK
+Testing ReaderTest/allowNumericKeysTest: OK
+Testing CharReaderTest/parseWithNoErrors: OK
+Testing CharReaderTest/parseWithNoErrorsTestingOffsets: OK
+Testing CharReaderTest/parseNumber: OK
+Testing CharReaderTest/parseString: OK
+Testing CharReaderTest/parseComment: OK
+Testing CharReaderTest/parseObjectWithErrors: OK
+Testing CharReaderTest/parseArrayWithErrors: OK
+Testing CharReaderTest/parseWithOneError: OK
+Testing CharReaderTest/parseChineseWithOneError: OK
+Testing CharReaderTest/parseWithDetailError: OK
+Testing CharReaderTest/parseWithStackLimit: OK
+Testing CharReaderTest/testOperator: OK
+Testing CharReaderStrictModeTest/dupKeys: OK
+Testing CharReaderFailIfExtraTest/issue164: OK
+Testing CharReaderFailIfExtraTest/issue107: OK
+Testing CharReaderFailIfExtraTest/commentAfterObject: OK
+Testing CharReaderFailIfExtraTest/commentAfterArray: OK
+Testing CharReaderFailIfExtraTest/commentAfterBool: OK
+Testing CharReaderFailIfExtraTest/parseComment: OK
+Testing CharReaderAllowDropNullTest/issue178: OK
+Testing CharReaderAllowNumericKeysTest/allowNumericKeys: OK
+Testing CharReaderAllowSingleQuotesTest/issue182: OK
+Testing CharReaderAllowZeroesTest/issue176: OK
+Testing CharReaderAllowSpecialFloatsTest/specialFloat: OK
+Testing CharReaderAllowSpecialFloatsTest/issue209: OK
+Testing EscapeSequenceTest/readerParseEscapeSequence: OK
+Testing EscapeSequenceTest/charReaderParseEscapeSequence: OK
+Testing EscapeSequenceTest/writeEscapeSequence: OK
+Testing BuilderTest/settings: OK
+Testing BomTest/skipBom: OK
+Testing BomTest/notSkipBom: OK
+Testing IteratorTest/convert: OK
+Testing IteratorTest/decrement: OK
+Testing IteratorTest/reverseIterator: OK
+Testing IteratorTest/distance: OK
+Testing IteratorTest/nullValues: OK
+Testing IteratorTest/staticStringKey: OK
+Testing IteratorTest/names: OK
+Testing IteratorTest/indexes: OK
+Testing IteratorTest/constness: OK
+Testing RValueTest/moveConstruction: OK
+Testing FuzzTest/fuzzDoesntCrash: OK
+Testing ParseWithStructuredErrorsTest/success: OK
+Testing ParseWithStructuredErrorsTest/singleError: OK
+Testing MemberTemplateAs/BehavesSameAsNamedAs: OK
+Testing MemberTemplateIs/BehavesSameAsNamedIs: OK
+Testing VersionTest/VersionNumbersMatch: OK
+All 121 tests passed
+[100%] Built target jsoncpp_test
+[wind@Ubuntu build]$ sudo cmake --install .
+-- Install configuration: "Release"
+-- Installing: /usr/local/lib/pkgconfig/jsoncpp.pc
+-- Installing: /usr/local/lib/cmake/jsoncpp/jsoncpp-targets.cmake
+-- Installing: /usr/local/lib/cmake/jsoncpp/jsoncpp-targets-release.cmake
+-- Installing: /usr/local/lib/cmake/jsoncpp/jsoncppConfigVersion.cmake
+-- Installing: /usr/local/lib/cmake/jsoncpp/jsoncppConfig.cmake
+-- Installing: /usr/local/lib/cmake/jsoncpp/jsoncpp-namespaced-targets.cmake
+-- Installing: /usr/local/lib/libjsoncpp.so.1.9.7
+-- Installing: /usr/local/lib/libjsoncpp.so.27
+-- Installing: /usr/local/lib/libjsoncpp.so
+-- Installing: /usr/local/lib/libjsoncpp.a
+-- Installing: /usr/local/lib/objects-Release/jsoncpp_object/json_reader.cpp.o
+-- Installing: /usr/local/lib/objects-Release/jsoncpp_object/json_value.cpp.o
+-- Installing: /usr/local/lib/objects-Release/jsoncpp_object/json_writer.cpp.o
+-- Installing: /usr/local/include/json/allocator.h
+-- Installing: /usr/local/include/json/assertions.h
+-- Installing: /usr/local/include/json/config.h
+-- Installing: /usr/local/include/json/forwards.h
+-- Installing: /usr/local/include/json/json.h
+-- Installing: /usr/local/include/json/json_features.h
+-- Installing: /usr/local/include/json/reader.h
+-- Installing: /usr/local/include/json/value.h
+-- Installing: /usr/local/include/json/version.h
+-- Installing: /usr/local/include/json/writer.h
+[wind@Ubuntu build]$ 
+```
+
+之后, 我们也可以在`/usr/local/lib/cmake/jsoncpp`下查看其与`find_package`有关的`cmake`配置脚本
+
+```shell
+[wind@Ubuntu jsoncpp]$ ll
+total 32
+drwxr-xr-x 2 root root 4096 Sep 10 10:07 ./
+drwxr-xr-x 5 root root 4096 Sep 10 08:44 ../
+-rw-r--r-- 1 root root 1124 Sep 10 10:05 jsoncppConfig.cmake
+-rw-r--r-- 1 root root 2762 Sep 10 10:05 jsoncppConfigVersion.cmake
+-rw-r--r-- 1 root root  431 Sep 10 08:41 jsoncpp-namespaced-targets.cmake
+-rw-r--r-- 1 root root 5951 Sep 10 10:05 jsoncpp-targets.cmake
+-rw-r--r-- 1 root root 2122 Sep 10 10:05 jsoncpp-targets-release.cmake
+[wind@Ubuntu jsoncpp]$ 
+```
+
+`jsoncppConfig.cmake`是`find_package`的入口文件, 它会将`find_package`引导到`jsoncpp-targets.cmake`
+
+而在`jsoncpp-targets.cmake`中, 我们可以看到
+
+```cmake
+# Compute the installation prefix relative to this file.
+get_filename_component(_IMPORT_PREFIX "${CMAKE_CURRENT_LIST_FILE}" PATH)
+get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)
+get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)
+get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)
+```
+
+`get_filename_component(_IMPORT_PREFIX "${CMAKE_CURRENT_LIST_FILE}" PATH)`是把本文件的全路径`${CMAKE_CURRENT_LIST_FILE}`, 即`/usr/local/lib/cmake/jsoncpp/jsoncpp-targets.cmake`, 的上一级目录(`PATH`指令), 赋给`_IMPORT_PREFIX`, 于是第一次之后, `_IMPORT_PREFIX`就是`/usr/local/lib/cmake/jsoncpp`, 第二次就是`/usr/local/lib/cmake`, 第三次之后就是`/usr/local/lib`, 第四次之后就是`/usr/local`, 它通过这种相对路径的方式来适应各个平台下不同的安装规则, 并最终找到本地安装的根目录, 再基于此去寻找, 其它的库文件, 比如`/usr/local`下的`include`
+
+`jsoncpp-targets.cmake`还包含了`soncpp-targets-*.cmake`, 在这里就是`jsoncpp-targets-release.cmake`, 在`jsoncpp-targets-release.cmake`中, 我们看到, 它描述了动态库的位置
+
+```cmake
+# Import target "jsoncpp_lib" for configuration "Release"
+set_property(TARGET jsoncpp_lib APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
+set_target_properties(jsoncpp_lib PROPERTIES
+  IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/lib/libjsoncpp.so.1.9.7"
+  IMPORTED_SONAME_RELEASE "libjsoncpp.so.27"
+  )
+```
+
+ 还有静态库
+
+```cmake
+# Import target "jsoncpp_static" for configuration "Release"
+set_property(TARGET jsoncpp_static APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
+set_target_properties(jsoncpp_static PROPERTIES
+  IMPORTED_LINK_INTERFACE_LANGUAGES_RELEASE "CXX"
+  IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/lib/libjsoncpp.a"
+  )
+```
+
+目标库
+
+```cmake
+# Import target "jsoncpp_object" for configuration "Release"
+set_property(TARGET jsoncpp_object APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
+set_target_properties(jsoncpp_object PROPERTIES
+  IMPORTED_COMMON_LANGUAGE_RUNTIME_RELEASE ""
+  IMPORTED_OBJECTS_RELEASE "${_IMPORT_PREFIX}/lib/objects-Release/jsoncpp_object/json_reader.cpp.o;${_IMPORT_PREFIX}/lib/objects-Release/jsoncpp_object/json_value.cpp.o;${_IMPORT_PREFIX}/lib/objects-Release/jsoncpp_object/json_writer.cpp.o"
+  )
+```
+
+接下来我们看看`jsoncpp-namespaced-targets.cmake`, 因为这和之后我们对于`jsoncpp`的使用密切相关
+
+```cmake
+if (NOT TARGET JsonCpp::JsonCpp)
+    if (TARGET jsoncpp_static)
+        add_library(JsonCpp::JsonCpp INTERFACE IMPORTED)
+        set_target_properties(JsonCpp::JsonCpp PROPERTIES INTERFACE_LINK_LIBRARIES "jsoncpp_static")
+    elseif (TARGET jsoncpp_lib)
+        add_library(JsonCpp::JsonCpp INTERFACE IMPORTED)
+        set_target_properties(JsonCpp::JsonCpp PROPERTIES INTERFACE_LINK_LIBRARIES "jsoncpp_lib")
+    endif ()
+endif ()
+
+```
+
+它的大意就是如果项目中没有(链接)`JsonCpp::JsonCpp`, 那么有目标`jsoncpp_static`它会先用静态库, 如果没有静态库, 再去使用`jsoncpp_lib`动态库.
+
+-----
+
+下面, 我们使用`Config`模式查找并使用`jsoncpp`
+
+```shell
+[wind@Ubuntu find_jsoncpp_config]$ tree .
+.
+├── CMakeLists.txt
+└── main.cpp
+
+1 directory, 2 files
+[wind@Ubuntu find_jsoncpp_config]$ 
+```
+
+```cmake
+cmake_minimum_required(VERSION 3.18)
+
+project(JsoncppDemo LANGUAGES CXX)
+
+# 使用C++11标准
+set(CMAKE_CXX_STANDARD 11)
+
+# REQUIRED找不到直接退出
+find_package(jsoncpp CONFIG REQUIRED)
+
+add_executable(main main.cpp)
+
+target_link_libraries(main PRIVATE JsonCpp::JsonCpp)
+
+```
+
+```cpp
+#include<iostream>
+#include<json/json.h>
+
+int main()
+{
+    Json::Value root;
+    root["name"] = "whisper";
+    root["age"] = 18;
+
+    Json::StreamWriterBuilder writer;
+    std::string JsonStr = Json::writeString(writer, root);
+    std::cout<<"root: \r\n" << JsonStr << std::endl;
+
+    return 0;
+}
+
+```
+
+```shell
+[wind@Ubuntu find_jsoncpp_config]$ mkdir build && cd build
+[wind@Ubuntu build]$ cmake ..
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done (0.5s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/find_jsoncpp_config/build
+[wind@Ubuntu build]$ cmake --build . -v
+Change Dir: '/home/wind/cmakeClass/find_jsoncpp_config/build'
+
+Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile
+/usr/bin/cmake -S/home/wind/cmakeClass/find_jsoncpp_config -B/home/wind/cmakeClass/find_jsoncpp_config/build --check-build-system CMakeFiles/Makefile.cmake 0
+/usr/bin/cmake -E cmake_progress_start /home/wind/cmakeClass/find_jsoncpp_config/build/CMakeFiles /home/wind/cmakeClass/find_jsoncpp_config/build//CMakeFiles/progress.marks
+/usr/bin/gmake  -f CMakeFiles/Makefile2 all
+gmake[1]: Entering directory '/home/wind/cmakeClass/find_jsoncpp_config/build'
+/usr/bin/gmake  -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/depend
+gmake[2]: Entering directory '/home/wind/cmakeClass/find_jsoncpp_config/build'
+cd /home/wind/cmakeClass/find_jsoncpp_config/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/wind/cmakeClass/find_jsoncpp_config /home/wind/cmakeClass/find_jsoncpp_config /home/wind/cmakeClass/find_jsoncpp_config/build /home/wind/cmakeClass/find_jsoncpp_config/build /home/wind/cmakeClass/find_jsoncpp_config/build/CMakeFiles/main.dir/DependInfo.cmake "--color="
+gmake[2]: Leaving directory '/home/wind/cmakeClass/find_jsoncpp_config/build'
+/usr/bin/gmake  -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/build
+gmake[2]: Entering directory '/home/wind/cmakeClass/find_jsoncpp_config/build'
+[ 50%] Building CXX object CMakeFiles/main.dir/main.cpp.o
+/usr/bin/c++   -std=gnu++11 -MD -MT CMakeFiles/main.dir/main.cpp.o -MF CMakeFiles/main.dir/main.cpp.o.d -o CMakeFiles/main.dir/main.cpp.o -c /home/wind/cmakeClass/find_jsoncpp_config/main.cpp
+[100%] Linking CXX executable main
+/usr/bin/cmake -E cmake_link_script CMakeFiles/main.dir/link.txt --verbose=1
+/usr/bin/c++ CMakeFiles/main.dir/main.cpp.o -o main  /usr/local/lib/libjsoncpp.a 
+gmake[2]: Leaving directory '/home/wind/cmakeClass/find_jsoncpp_config/build'
+[100%] Built target main
+gmake[1]: Leaving directory '/home/wind/cmakeClass/find_jsoncpp_config/build'
+/usr/bin/cmake -E cmake_progress_start /home/wind/cmakeClass/find_jsoncpp_config/build/CMakeFiles 0
+
+[wind@Ubuntu build]$ ./main
+root: 
+{
+        "age" : 18,
+        "name" : "whisper"
+}
+[wind@Ubuntu build]$ 
+
+```
+
+我们这里链接的是`JsonCpp:JsonCpp`, 可以看到, 链接的静态库, 不过`jsoncpp-namespaced-targets.cmake`是没有目标`JsonCpp:JsonCpp`的时候才生效的, 所以此处静态库的链接应该是由其它文件所造成的, 为了避免产生歧义, 我们最好还是直接显式写具体的链接目标, 比如下面是链接`jsoncpp_lib`的
+
+```shell
+[wind@Ubuntu build]$ cmake --build . -v
+Change Dir: '/home/wind/cmakeClass/find_jsoncpp_config/build'
+
+Run Build Command(s): /usr/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile
+/usr/bin/cmake -S/home/wind/cmakeClass/find_jsoncpp_config -B/home/wind/cmakeClass/find_jsoncpp_config/build --check-build-system CMakeFiles/Makefile.cmake 0
+/usr/bin/cmake -E cmake_progress_start /home/wind/cmakeClass/find_jsoncpp_config/build/CMakeFiles /home/wind/cmakeClass/find_jsoncpp_config/build//CMakeFiles/progress.marks
+/usr/bin/gmake  -f CMakeFiles/Makefile2 all
+gmake[1]: Entering directory '/home/wind/cmakeClass/find_jsoncpp_config/build'
+/usr/bin/gmake  -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/depend
+gmake[2]: Entering directory '/home/wind/cmakeClass/find_jsoncpp_config/build'
+cd /home/wind/cmakeClass/find_jsoncpp_config/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/wind/cmakeClass/find_jsoncpp_config /home/wind/cmakeClass/find_jsoncpp_config /home/wind/cmakeClass/find_jsoncpp_config/build /home/wind/cmakeClass/find_jsoncpp_config/build /home/wind/cmakeClass/find_jsoncpp_config/build/CMakeFiles/main.dir/DependInfo.cmake "--color="
+gmake[2]: Leaving directory '/home/wind/cmakeClass/find_jsoncpp_config/build'
+/usr/bin/gmake  -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/build
+gmake[2]: Entering directory '/home/wind/cmakeClass/find_jsoncpp_config/build'
+[ 50%] Building CXX object CMakeFiles/main.dir/main.cpp.o
+/usr/bin/c++   -std=gnu++11 -MD -MT CMakeFiles/main.dir/main.cpp.o -MF CMakeFiles/main.dir/main.cpp.o.d -o CMakeFiles/main.dir/main.cpp.o -c /home/wind/cmakeClass/find_jsoncpp_config/main.cpp
+[100%] Linking CXX executable main
+/usr/bin/cmake -E cmake_link_script CMakeFiles/main.dir/link.txt --verbose=1
+/usr/bin/c++ CMakeFiles/main.dir/main.cpp.o -o main  -Wl,-rpath,/usr/local/lib /usr/local/lib/libjsoncpp.so.1.9.7 
+gmake[2]: Leaving directory '/home/wind/cmakeClass/find_jsoncpp_config/build'
+[100%] Built target main
+gmake[1]: Leaving directory '/home/wind/cmakeClass/find_jsoncpp_config/build'
+/usr/bin/cmake -E cmake_progress_start /home/wind/cmakeClass/find_jsoncpp_config/build/CMakeFiles 0
+
+[wind@Ubuntu build]$ 
+```
+
+另外, 我们之前显式定义了C++的执行标准, 使用的是C++11, 这是有意而为之的, 如果我们注释掉, 会返现无法编译通过.
+
+```shell
+[wind@Ubuntu build]$ rm -rf ./*
+[wind@Ubuntu build]$ cmake ..
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done (0.5s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/find_jsoncpp_config/build
+[wind@Ubuntu build]$ cmake --build . 
+[ 50%] Building CXX object CMakeFiles/main.dir/main.cpp.o
+[100%] Linking CXX executable main
+/usr/bin/ld: CMakeFiles/main.dir/main.cpp.o: in function `main':
+main.cpp:(.text+0x7e): undefined reference to `Json::Value::operator[](std::basic_string_view<char, std::char_traits<char> >)'
+/usr/bin/ld: main.cpp:(.text+0xe6): undefined reference to `Json::Value::operator[](std::basic_string_view<char, std::char_traits<char> >)'
+collect2: error: ld returned 1 exit status
+gmake[2]: *** [CMakeFiles/main.dir/build.make:98: main] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:83: CMakeFiles/main.dir/all] Error 2
+gmake: *** [Makefile:91: all] Error 2
+[wind@Ubuntu build]$ 
+```
+
+这是因为我们自己写的源代码和`jsoncpp`库存在有关C++标准的兼容问题, 首先, 我们需要知道, `cmake`如果不指定C++标准, 就会使用编译器默认的C++标准, 对于本机的编译器, 执行的是C++17标准
+
+```shell
+[wind@Ubuntu build]$ echo | g++ -dM -E -x c++ - | grep __cplusplus
+#define __cplusplus 201703L
+```
+
+但我们从`jsoncpp`那里克隆下来的源代码, 里面显式指定的是使用C++11编译的, 所以我们的`jsoncpp`它是C++11, 关键在于, 在C++17引入了一个新的类型, `std::string_view`, 作为常量字符串的一种更优的替代, 并为此更新了函数重载规则: 常量字符串会被匹配到`std::string_view`类型, 而不再是`std::string`
+
+所以如果我们不显示指定C++标准, 我们的项目用的是C++17, 而我们使用了
+
+```cpp
+root["name"] = "whisper";
+root["age"] = 18;
+```
+
+在C++17里,它会使用 `Json::Value& operator[string_view]`, 但`jsoncpp`是用C++11编的, 没有这个接口, 所以链接失败
+
+如果我们显式指定使用C++11, 因为C++11还没有`std::string_view`, 所以它还会重载到`Json::Value& operator[string]`
+
 # 完
