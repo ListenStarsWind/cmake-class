@@ -3668,4 +3668,411 @@ root["age"] = 18;
 
 如果我们显式指定使用C++11, 因为C++11还没有`std::string_view`, 所以它还会重载到`Json::Value& operator[string]`
 
+----------
+
+下面我们介绍`ctest`的使用方法.
+
+`ctest`是一个`cmake`的集成测试框架, 用于自动化执行项目测试. 支持多种测试类型(如单元测试, 性能测试), 并能生成详细的的测试报告.
+
+`ctest`的基本命令就是
+
+```cmake
+ctest [<options>] [--test-dir <path-to-build>]
+```
+
+对于脚本, 则要先包含测试模块, 然后必须在顶层`CMakeLists.txt`中添加测试, 可供测试的包括, 可执行文件, `cmake`脚本或命令
+
+```cmake
+include(CTest)
+
+# NAME 是为测试命名, COMMAND 是被测试文件, arg是参数
+add_test(NAME <name> COMMAND <command> [<arg>...])
+```
+
+下面我们使用我们原先安装的数学库, 对其进行简单测试
+
+首先, 由于我们之前已经把我们数学库给删了, 所以先再安装一下
+
+```shell
+[wind@Ubuntu CTest_myMath]$ cd ~/cmakeClass/install_shared_mymath/build/
+[wind@Ubuntu build]$ ls
+CMakeCache.txt  CMakeFiles  cmake_install.cmake  install_manifest.txt  lib  Makefile  my_lib
+[wind@Ubuntu build]$ sudo cmake --install .
+[sudo] password for wind: 
+-- Install configuration: ""
+-- Installing: /usr/local/lib/libMyMath.so.1.2.3
+-- Installing: /usr/local/lib/libMyMath.so.20
+-- Installing: /usr/local/lib/libMyMath.so
+-- Up-to-date: /usr/local/include/MyMath
+-- Installing: /usr/local/include/MyMath/math.h
+-- Installing: /usr/local/lib/cmake/MyMath/MyMathTargets.cmake
+-- Installing: /usr/local/lib/cmake/MyMath/MyMathTargets-noconfig.cmake
+-- Installing: /usr/local/lib/cmake/MyMath/MyMathConfig.cmake
+[wind@Ubuntu build]$ cd -
+/home/wind/cmakeClass/CTest_myMath
+[wind@Ubuntu CTest_myMath]$ 
+```
+
+接下里是目录结构
+
+```shell
+[wind@Ubuntu CTest_myMath]$ tree .
+.
+├── CMakeLists.txt
+└── main.cpp
+
+1 directory, 2 files
+[wind@Ubuntu CTest_myMath]$ 
+```
+
+```cpp
+#include<iostream>
+#include<MyMath/math.h>
+#include<cassert>
+
+int main()
+{
+    assert(add(2,3) == 5);
+    assert(sub(2,3) == -1);
+
+    std::cout<<"Test OK!"<<std::endl;
+
+    return 0;
+}
+```
+
+```cmake
+make_minimum_required(VERSION 3.18)
+
+project(TestMyMath LANGUAGES CXX)
+
+# 开启测试功能
+include(CTest)
+
+# 添加可执行测试文件
+add_executable(main main.cpp)
+
+# 查找MaMath库
+find_package(MyMath CONFIG REQUIRED)
+
+# 链接MyMath库
+target_link_libraries(main PRIVATE MyMath::MyMath)
+
+# 添加测试 到CTest
+add_test(NAME TestMyMath COMMAND main)
+```
+
+```shell
+[wind@Ubuntu CTest_myMath]$ mkdir build && cd build
+[wind@Ubuntu build]$ cmake ..
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done (0.5s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/CTest_myMath/build
+[wind@Ubuntu build]$ cmake --build .
+[ 50%] Building CXX object CMakeFiles/main.dir/main.cpp.o
+[100%] Linking CXX executable main
+[100%] Built target main
+[wind@Ubuntu build]$ ctest
+Test project /home/wind/cmakeClass/CTest_myMath/build
+    Start 1: TestMyMath
+1/1 Test #1: TestMyMath .......................   Passed    0.01 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   0.01 sec
+[wind@Ubuntu build]$ 
+```
+
+`ctest`实际上就是执行构建之后生成的`CTestTestfile.cmake`脚本
+
+```cmake
+# CMake generated Testfile for 
+# Source directory: /home/wind/cmakeClass/CTest_myMath
+# Build directory: /home/wind/cmakeClass/CTest_myMath/build
+# 
+# This file includes the relevant testing commands required for 
+# testing this directory and lists subdirectories to be tested as well.
+add_test(TestMyMath "/home/wind/cmakeClass/CTest_myMath/build/main")
+set_tests_properties(TestMyMath PROPERTIES  _BACKTRACE_TRIPLES "/home/wind/cmakeClass/CTest_myMath/CMakeLists.txt;18;add_test;/home/wind/cmakeClass/CTest_myMath/CMakeLists.txt;0;")
+
+```
+
+​	我们看到, 全部(其实就一个)测试用例都被通过了. 接下来我们把它改成错的, 看看什么情况
+
+```cpp
+#include<iostream>
+#include<MyMath/math.h>
+#include<cassert>
+
+int main()
+{
+    assert(add(2,3) == 5);
+    assert(sub(2,3) == 1);
+
+    std::cout<<"Test OK!"<<std::endl;
+
+    return 0;
+}
+```
+
+```shell
+[wind@Ubuntu build]$ make clean
+[wind@Ubuntu build]$ cmake --build .
+[ 50%] Building CXX object CMakeFiles/main.dir/main.cpp.o
+[100%] Linking CXX executable main
+[100%] Built target main
+[wind@Ubuntu build]$ ctest
+Test project /home/wind/cmakeClass/CTest_myMath/build
+    Start 1: TestMyMath
+1/1 Test #1: TestMyMath .......................Subprocess aborted***Exception:   1.49 sec
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =   1.50 sec
+
+The following tests FAILED:
+          1 - TestMyMath (Subprocess aborted)
+Errors while running CTest
+Output from these tests are in: /home/wind/cmakeClass/CTest_myMath/build/Testing/Temporary/LastTest.log
+Use "--rerun-failed --output-on-failure" to re-run the failed cases verbosely.
+[wind@Ubuntu build]$ 
+```
+
+我们看到错误的同时还会为我们输出一份日志
+
+```txt
+Start testing: Sep 11 09:55 CST
+----------------------------------------------------------
+1/1 Testing: TestMyMath
+1/1 Test: TestMyMath
+Command: "/home/wind/cmakeClass/CTest_myMath/build/main"
+Directory: /home/wind/cmakeClass/CTest_myMath/build
+"TestMyMath" start time: Sep 11 09:55 CST
+Output:
+----------------------------------------------------------
+main: /home/wind/cmakeClass/CTest_myMath/main.cpp:8: int main(): Assertion `sub(2,3) == 1' failed.
+<end of output>
+Test time =   1.49 sec
+----------------------------------------------------------
+Test Failed.
+"TestMyMath" end time: Sep 11 09:55 CST
+"TestMyMath" time elapsed: 00:00:01
+----------------------------------------------------------
+
+End testing: Sep 11 09:55 CST
+
+```
+
+```shell
+[wind@Ubuntu CPack_mymath_shared]$ cd ~/cmakeClass/install_shared_mymath/build/
+[wind@Ubuntu build]$ cat install_manifest.txt | xargs sudo rm -v
+[sudo] password for wind: 
+removed '/usr/local/lib/libMyMath.so.1.2.3'
+removed '/usr/local/lib/libMyMath.so.20'
+removed '/usr/local/lib/libMyMath.so'
+removed '/usr/local/include/MyMath/math.h'
+removed '/usr/local/lib/cmake/MyMath/MyMathTargets.cmake'
+removed '/usr/local/lib/cmake/MyMath/MyMathTargets-noconfig.cmake'
+removed '/usr/local/lib/cmake/MyMath/MyMathConfig.cmake'
+[wind@Ubuntu build]$ 
+```
+
+-----------
+
+接下来我们介绍`CPack`, `CPack`将基于`cmake`的`install`指令, 对需要打包的文件进行自动收集, 并生成指定格式的包格式, 比如`DEB RPM ZIP MSL DMG`, 而且它也可以进行依赖关系的配置. 规定包版本等功能.
+
+我们还是以之前之前的, 那个有可执行程序的``mymath`为蓝本, 进行演示
+
+```shell
+[wind@Ubuntu cmakeClass]$ cp -rf my_math CPack_mymath_shared
+[wind@Ubuntu cmakeClass]$ cd CPack_mymath_shared/
+[wind@Ubuntu CPack_mymath_shared]$ rm -rf build
+[wind@Ubuntu CPack_mymath_shared]$ tree .
+.
+├── app
+│   ├── CMakeLists.txt
+│   └── main.cpp
+├── CMakeLists.txt
+└── my_lib
+    ├── CMakeLists.txt
+    ├── include
+    │   └── my_math.h
+    └── src
+        ├── add.cpp
+        └── sub.cpp
+
+5 directories, 7 files
+[wind@Ubuntu CPack_mymath_shared]$
+```
+
+```cmake
+# top
+cmake_minimum_required(VERSION 3.18)
+
+project(TestMyMath)
+
+add_subdirectory(my_lib)
+
+add_subdirectory(app)
+
+# 要放在顶层最后一行, 否则收集文件可能不全
+include(CPack)
+```
+
+```cmake
+# src
+file(GLOB SRC_LISTS "src/*.cpp")
+
+# 使用源文件生成静态库MyMath
+add_library(MyMath SHARED ${SRC_LISTS})
+
+# 告诉cmake对于目标MyMath, 从哪里找到头文件
+target_include_directories(MyMath PUBLIC
+    # 构建阶段, 就以源代码上的头文件做包含路径
+    "$<BUILD_INTERFACE:>${CMAKE_CURRENT_SOURCE_DIR}/include"
+    # 安装阶段, 就以本地安装目录为准, 可以直接简写为include
+    "#<INSTALL_INTERFACE:include>"
+)
+
+# 修改默认输出路径
+set_target_properties(MyMath PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+    OUTPUT_NAME MyMath
+    VERSION 1.2.3
+    SOVERSION 20
+)
+
+# 安装库文件
+install(TARGETS MyMath)
+
+# 安装头文件
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
+    DESTINATION include
+    FILES_MATCHING PATTERN "*.h"
+)
+
+```
+
+```cmake
+# app
+# 搜集文件列表
+file(GLOB SRC_LISTS "*.cpp")
+
+# 构建目标
+add_executable(main ${SRC_LISTS})
+
+# 添加链接库列表
+target_link_libraries(main PRIVATE MyMath)
+
+set_target_properties(main PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+    # 添加构件时rpath
+    BUILD_RPATH ${CMAKE_BINARY_DIR}/lib
+    # 添加运行时rpath
+    INSTALL_RPATH "\$ORIGIN/../lib" # ORIGIN是程序所在目录, 再向上以及就可以找到库目录, 这在构建和安装期都是成立的
+)
+
+install(TARGETS main)
+
+```
+
+由于之前没有安装, 所以我们的安装写的不是很规范, 比如, 我们没有包含`GNUInstallDirs`, 该模块内部包含了许多描述各平台位置的内置变量, 但我们在这里不用它的也可以, 另外, 有些`install`没有`DESTINATION`, 这样的话就使用默认, 也没什么大的影响, 不过如果真的要对外发布, 还是不要这样随意
+
+```shell
+[wind@Ubuntu CPack_mymath_shared]$ mkdir build && cd build
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done (0.9s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/CPack_mymath_shared/build
+[wind@Ubuntu build]$ cmake --build .
+[ 20%] Building CXX object my_lib/CMakeFiles/MyMath.dir/src/add.cpp.o
+[ 40%] Building CXX object my_lib/CMakeFiles/MyMath.dir/src/sub.cpp.o
+[ 60%] Linking CXX shared library ../lib/libMyMath.so
+[ 60%] Built target MyMath
+[ 80%] Building CXX object app/CMakeFiles/main.dir/main.cpp.o
+[100%] Linking CXX executable ../bin/main
+[100%] Built target main
+[wind@Ubuntu build]$ ls
+app  bin  CMakeCache.txt  CMakeFiles  cmake_install.cmake  CPackConfig.cmake  CPackSourceConfig.cmake  lib  Makefile  my_lib
+[wind@Ubuntu build]$ cpack
+CPack: Create package using STGZ
+CPack: Install projects
+CPack: - Run preinstall target for: TestMyMath
+CPack: - Install project: TestMyMath []
+CPack: Create package
+CPack: - package: /home/wind/cmakeClass/CPack_mymath_shared/build/TestMyMath-0.1.1-Linux.sh generated.
+CPack: Create package using TGZ
+CPack: Install projects
+CPack: - Run preinstall target for: TestMyMath
+CPack: - Install project: TestMyMath []
+CPack: Create package
+CPack: - package: /home/wind/cmakeClass/CPack_mymath_shared/build/TestMyMath-0.1.1-Linux.tar.gz generated.
+CPack: Create package using TZ
+CPack: Install projects
+CPack: - Run preinstall target for: TestMyMath
+CPack: - Install project: TestMyMath []
+CPack: Create package
+CPack: - package: /home/wind/cmakeClass/CPack_mymath_shared/build/TestMyMath-0.1.1-Linux.tar.Z generated.
+[wind@Ubuntu build]$ ls
+app  CMakeCache.txt  cmake_install.cmake  _CPack_Packages          install_manifest.txt  Makefile  TestMyMath-0.1.1-Linux.sh      TestMyMath-0.1.1-Linux.tar.Z
+bin  CMakeFiles      CPackConfig.cmake    CPackSourceConfig.cmake  lib                   my_lib    TestMyMath-0.1.1-Linux.tar.gz
+[wind@Ubuntu build]$ cp TestMyMath-0.1.1-Linux.tar.gz /tmp/
+[wind@Ubuntu build]$ cd /tmp
+[wind@Ubuntu tmp]$ tar xvf TestMyMath-0.1.1-Linux.tar.gz 
+TestMyMath-0.1.1-Linux/include/
+TestMyMath-0.1.1-Linux/include/my_math.h
+TestMyMath-0.1.1-Linux/lib/
+TestMyMath-0.1.1-Linux/lib/libMyMath.so.1.2.3
+TestMyMath-0.1.1-Linux/lib/libMyMath.so
+TestMyMath-0.1.1-Linux/lib/libMyMath.so.20
+TestMyMath-0.1.1-Linux/bin/
+TestMyMath-0.1.1-Linux/bin/main
+[wind@Ubuntu tmp]$ cd TestMyMath-0.1.1-Linux/
+[wind@Ubuntu TestMyMath-0.1.1-Linux]$ tree .
+.
+├── bin
+│   └── main
+├── include
+│   └── my_math.h
+└── lib
+    ├── libMyMath.so -> libMyMath.so.20
+    ├── libMyMath.so.1.2.3
+    └── libMyMath.so.20 -> libMyMath.so.1.2.3
+
+4 directories, 5 files
+[wind@Ubuntu TestMyMath-0.1.1-Linux]$ cd bin
+[wind@Ubuntu bin]$ ./main && ldd main
+3 + 4 == 7
+3 - 4 == -1
+        linux-vdso.so.1 (0x00007ffd661bf000)
+        libMyMath.so.20 => /tmp/TestMyMath-0.1.1-Linux/bin/./../lib/libMyMath.so.20 (0x0000745315a23000)
+        libstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x0000745315600000)
+        libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x0000745315200000)
+        libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x0000745315934000)
+        /lib64/ld-linux-x86-64.so.2 (0x0000745315a2f000)
+        libgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x0000745315906000)
+[wind@Ubuntu bin]$ 
+```
+
+我们看到`/tmp/TestMyMath-0.1.1-Linux/bin/./../lib/libMyMath.so.20`用的正是`"\$ORIGIN/../lib"`
+
 # 完
