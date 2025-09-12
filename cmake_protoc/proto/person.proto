@@ -1,0 +1,14 @@
+// 指定使用的 proto 语法版本
+syntax = "proto3";
+
+// 定义包名（命名空间），避免不同文件中消息名冲突
+package example;
+
+// 在 proto 中，消息由若干字段组成
+// 每个字段都有一个唯一的编号（tag），编号才是序列化时真正传输的标识
+// name、id、email 是字段名，方便在代码中引用
+message Person {
+    string name  = 1;  // 字段1：字符串类型
+    int32  id    = 2;  // 字段2：32位整型
+    string email = 3;  // 字段3：字符串类型
+}
