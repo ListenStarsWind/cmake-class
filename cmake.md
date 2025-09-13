@@ -4075,4 +4075,342 @@ TestMyMath-0.1.1-Linux/bin/main
 
 我们看到`/tmp/TestMyMath-0.1.1-Linux/bin/./../lib/libMyMath.so.20`用的正是`"\$ORIGIN/../lib"`
 
+----
+
+下面，我们将通过调用外部的 `protoc` 来练习 `cmake` 的命令模式。
+
+首先简单介绍一下 `protoc`：它是一个将 `.proto` 文件转译成各种语言（如 C++、Java、Python 等）中类或结构体定义的工具。举个例子，在 `.proto` 文件里我们定义了一个 `Person` 消息结构，接着就可以用 `protoc` 把它生成对应的 C++ 类。
+
+为什么要这样做呢？好处在于，它能从机制上确保协议的一致性。由于最初的 `.proto` 文件是统一的源头，不论前后端分别使用什么语言，都能通过各自生成的代码来共享同一份协议定义。
+
+等到我们写好`.proto`后, 就可以让`cmake`调用`protoc`生成C++代码. 这就是`cmake`的命令模式, 即调用外部的命令行工具以完成更为复杂的功能.
+
+在正式写代码之前, 我们先安装一下`protoc`
+
+```shell
+sudo apt install protobuf-compiler
+```
+
+接下来是项目结构
+
+```shell
+[wind@Ubuntu cmake_protoc]$ tree .
+.
+├── CMakeLists.txt
+├── main.cpp
+└── proto
+    └── person.proto
+
+2 directories, 3 files
+[wind@Ubuntu cmake_protoc]$ 
+```
+
+```cmake
+cmake_minimum_required(VERSION 3.18)
+
+project(ProtocExample LANGUAGES CXX)
+
+# 规定C++标准
+set(CMAKE_CXX_STANDARD 11)
+
+# 查找Protobuf库, 为proto的使用奠定基础: 包含需要用到的库文件/头文件
+# 最低版本3.0
+find_package(Protobuf 3.0 REQUIRED)
+
+# 收集proto元消息文件
+file(GLOB PROTO_FILES ${CMAKE_CURRENT_SOURCE_DIR}/proto/*.proto)
+
+# 将来存放所有头文件 源文件全名称的集合
+set(GEN_SRCS "") # *.pb.cc
+set(GEN_HEADS "") # *.pb.h
+
+# 创建proto的C++代码生成目录
+set(PB_CPP_OUT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/gen/cpp)
+file(MAKE_DIRECTORY ${PB_CPP_OUT_DIR})
+
+# 对PROTO_FILES下的所有文件进行循环操作
+foreach(FILE ${PROTO_FILES})  # 将其中的每个文件取出, 用FILE指代
+    # 获取原始文件中不带扩展名的基础名, 为将来生成的C++代码文件提供命名依据
+    get_filename_component(BASE_NAME ${FILE} NAME_WE) # 如果原始文件是person.proto, 将把person取出放到BASE_NAME中
+
+    # 将单个头文件源文件全名称追加到文件集合中
+    list(APPEND GEN_SRCS "${PB_CPP_OUT_DIR}/${BASE_NAME}.pb.cc")
+    list(APPEND GEN_HEADS "${PB_CPP_OUT_DIR}/${BASE_NAME}.pb.h")
+
+    # 生成C++代码文件
+
+    # 添加自定义指令
+    add_custom_command(
+        OUTPUT "${PB_CPP_OUT_DIR}/${BASE_NAME}.pb.cc" "${PB_CPP_OUT_DIR}/${BASE_NAME}.pb.h" # 指令输出文件, 将这些文件注册金cmake文件管理器
+        COMMAND protoc # 使用外部命令行工具protoc
+        ARGS --cpp_out=${PB_CPP_OUT_DIR} # 调用外部工具时的参数 输出cpp文件到指定目录下
+            -I ${CMAKE_CURRENT_SOURCE_DIR}/proto # 告知protoc原始文件的搜索路径
+            ${FILE} # protoc的操作文件
+        DEPENDS ${FILE} # 自定义指令仅依赖于原始文件FILE
+        COMMENT echo "从proto生成对应的C++代码"
+        VERBATIM # 该指令不需要进行拆分优化, 保证搜索路径可以被正常传递
+    )
+    
+endforeach()
+
+# 添加自定义目标, 依赖于GEN_SRCS和GEN_HEADS两个文件集合
+add_custom_target(generate_protobuf DEPENDS ${GEN_SRCS} ${GEN_HEADS})
+
+# 配置阶段, 也就是cmake.. 阶段, cmake会执行foreach这个循环体, 它会把理应存在的文件全名称写入到GEN_SRCS和GEN_HEADS这两个文件集合中
+# 并且, 由于cmake在自定义指令中发现将会生成某些文件, 于是也会将这些文件注册到自己的文件管理系统中, 并依据自定义指令, 为这些文件生成
+# 对应的构建命令
+
+# 而在构建阶段, 当试图构建自定义目标generate_protobuf时, cmake会读取两个文件集合中的文件信息, 并借助于自己的文件管理系统去寻找文件
+# 文件管理器会发现文件是不存在的, 但在之前的注册信息中发现;了对应的生成方式, 于是文件管理器将这些文件构建指令交给cmake的其它相关组件
+# 进行指令执行, 从而生成所需文件, 满足自定义目标的构建要求
+
+
+# 将proto 生成的C++文件编译为静态库, 以方便它们作为一个整体供下游使用管理
+add_library(MyPrto STATIC ${GEN_SRCS})
+# cmake的普通目标不会通过文件管理器找文件, 也就是不能触发自动构建, 因此需要显示写明, 依赖于特定目标进行间接触发
+add_dependencies(MyPrto generate_protobuf)
+# 要求下游包含对应头文件
+target_include_directories(MyPrto INTERFACE ${PB_CPP_OUT_DIR})
+# 生成的C++源文件和头文件并不是完全自实现的, 它们还依赖于官方protobuf的相应文件
+target_link_libraries(MyPrto PUBLIC protobuf::libprotobuf)
+
+add_executable(main main.cpp)
+
+target_link_libraries(main PRIVATE MyPrto)
+```
+
+```cpp
+#include<iostream>
+#include"gen/cpp/person.pb.h"
+
+int main()
+{
+    // 创建person对象
+    example::Person person;
+    person.set_name("whisper");
+    person.set_id(12345);
+    person.set_email("whisper@example.com");
+
+    // 序列化person对象
+    std::string serialized_data;
+    person.SerializeToString(&serialized_data);
+    std::cout<<"Serialized size: " << serialized_data.size()<<std::endl;
+
+
+    // 反序列化person对象
+    example::Person parsed_person;
+    parsed_person.ParseFromString(serialized_data);
+    std::cout<<parsed_person.DebugString();
+
+    return 0;
+}
+```
+
+```protobuf
+/ 指定使用的 proto 语法版本
+syntax = "proto3";
+
+// 定义包名（命名空间），避免不同文件中消息名冲突
+package example;
+
+// 在 proto 中，消息由若干字段组成
+// 每个字段都有一个唯一的编号（tag），编号才是序列化时真正传输的标识
+// name、id、email 是字段名，方便在代码中引用
+message Person {
+    string name  = 1;  // 字段1：字符串类型
+    int32  id    = 2;  // 字段2：32位整型
+    string email = 3;  // 字段3：字符串类型
+}
+
+```
+
+```shell
+[wind@Ubuntu cmake_protoc]$ mkdir build && cd build
+[wind@Ubuntu build]$ cmake .. && cmake --build .
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found Protobuf: /usr/lib/x86_64-linux-gnu/libprotobuf.so (found suitable version "3.21.12", minimum required is "3.0") 
+-- Configuring done (0.9s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/cmake_protoc/build
+[ 16%] Built target generate_protobuf
+[ 33%] Building CXX object CMakeFiles/MyPrto.dir/gen/cpp/person.pb.cc.o
+[ 50%] Linking CXX static library libMyPrto.a
+[ 66%] Built target MyPrto
+[ 83%] Building CXX object CMakeFiles/main.dir/main.cpp.o
+[100%] Linking CXX executable main
+[100%] Built target main
+[wind@Ubuntu build]$ 
+```
+
+## 第四章
+
+下面我们侧重于`cmake`常见命令的语法细节
+
+`message`函数
+
+在`cmake`中可以使用`message`命令打印消息. 函数的签名如下
+
+```cmake
+message([STATUS|WARNING|AUTHOR_WARNING|FATAL_ERROR|SEND_ERROR] "massage to display" ...)
+```
+
+其中第一个参数, 也就是`STATUS|WARNING|AUTHOR_WARNING|FATAL_ERROR|SEND_ERROR`这些, 描述的是信息的级别, 不同的级别将会对`cmake`的构建行为做出不同的影响, 该函数可缺省, 默认参数为`NOTICE`, 即无普通, 只是进行一下常规打印. `cmake`对于相邻字符串的处理方式与C/C++相同, 都是直接拼接成一个更长的字符串("hello " "word" = "hello world").
+
+- FATAL_ERROR : 如果出现这种级别的消息, `cmake`将会停止脚本处理及生成构建文件, 并返回非零错误码.
+- SEND_ERROR: `cmake`错误, 但仍会继续脚本, 但不会生成构建文件
+- WARNING: 发出警告, 但脚本执行和构建文件生成仍将继续
+- STATUS: 表示打印信息是用户关系的关键数据
+
+其它不常用
+
+下面我们实际演示一下.
+
+```shell
+[wind@Ubuntu cmake_language]$ tree .
+.
+└── CMakeLists.txt
+
+1 directory, 1 file
+[wind@Ubuntu cmake_language]$ 
+```
+
+```cmake
+[wind@Ubuntu cmake_language]$ mkdir build && cd build
+[wind@Ubuntu build]$ cat ../CMakeLists.txt 
+cmake_minimum_required(VERSION 3.18)
+
+project(MessageDemo)
+
+message("begin " "CMakeLists.txt")
+[wind@Ubuntu build]$ 
+```
+
+```shell
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+begin CMakeLists.txt
+-- Configuring done (0.9s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/cmake_language/build
+[wind@Ubuntu build]$ ls
+CMakeCache.txt  CMakeFiles  cmake_install.cmake  Makefile
+[wind@Ubuntu build]$ 
+```
+
+`Configuring done`就是`CMakeLists.txt`脚本读完了, `Generating done`就是像`MakeFile`那样的配置文件生成了. 另外我们也看到了相邻字符串合并.
+
+```shell
+[wind@Ubuntu build]$ printf "\nmessage(STATUS "123")" >> ../CMakeLists.txt 
+[wind@Ubuntu build]$ rm -rf ./*
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+begin CMakeLists.txt
+-- 123
+-- Configuring done (0.9s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/cmake_language/build
+[wind@Ubuntu build]$ ls
+CMakeCache.txt  CMakeFiles  cmake_install.cmake  Makefile
+[wind@Ubuntu build]$ 
+```
+
+我们看到在表面上看起来就是多了两个`--`
+
+对于`WARNING`, 我们可以看到它是有语法高亮的, 并继续处理脚本和生成文件
+
+![image-20250913104550482](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250913104550482.png)
+
+`SEND_ERROR`则是不生成构建文件
+
+![image-20250913104910509](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250913104910509.png)
+
+可以看到, 对于`SEND_ERROR`, 脚本仍旧继续进行, 打印了最后的"end CMakeLists.txt", 但并没有生成构建文件
+
+对于`FATAL_ERROR`, 则连脚本都没有读完
+
+![image-20250913105753751](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250913105753751.png)
+
+在最后, 我们再简略说说其中某些等级的使用场景.
+
+---------------
+
+下面, 我们将介绍`cmake`中与变量相关的语法细节.
+
+变量是`cmake`中的基本存储单位, 它们的值始终是字符串.`set`和`unset`命令显式地设置或者取消设置变量, 但其它指令也具有修改变量的语义. 变量名区分大小写, 并且几乎可以由任何文本组成, 但我们建议仅使用由数字字符加上`- _`所组成的名称.
+
+与C/C++的变量类似, 在`cmake`中, 变量亦具有作用域的概念, 每个`set`和`unset`的变量, 都会在当前作用域开辟或释放一片空间.
+
+`Block Scope`块作用域
+
+使用`block() endblock()`语句, 可以类似C/C++`{}`一般, 创建一个局部作用域, 不过不常用
+
+```cmake
+block()
+  set(MY_VAR "inner")
+  message("Inside block: ${MY_VAR}")
+endblock()
+```
+
+`Function Scope`函数作用域
+
+使用`function() endfunction()`语句可以定义一段函数, 与C/C++中的函数类似, 这种`cmake`函数也可以有参数, 但没有返回值, 当使用被定义的函数时, 其也会有形参实参的概念, 函数内部局部变量的生命周期和函数相同
+
+```cmake
+# 定义一个叫f的函数
+function(f x y)
+  message("Inside: x=${x}, y=${y}")
+endfunction()
+
+# 使用函数
+f(hello world)
+```
+
+`Directory Scope`目录作用域
+
+在父级脚本定义的变量, 在子级脚本中会以C/C++引用的形式被继承下来, 作为对子级脚本作用域的初始化. 在`block() function()`外定义的变量即在本脚本的目录作用域中.
+
+`Persistent Cache`持久缓存
+
+在`set`时, 如果添加`CACHE STRING`参数, 则会将变量写入持久缓存, 即`cmake`自己的全局配置中, 这样在本机的任何一个项目中都能使用该变量, 与C/C++类似, 持久缓存变量优先级低, 只在高优先级没有重名变量后才会被使用.
+
+```cmake
+# 在任意一个脚本中定义持久缓存变量
+set(MY_VAR "new_value" CACHE STRING "desc" FORCE)
+# 可以使用FORCE为缓存变量添加注释
+# STRING表明变量类型, 也可以视为说明性设置
+```
+
+当我们使用`${}`(解引用)的时候, `cmake`会按照`Block Function Directory Cache`的先后顺序搜索变量, 这里的搜索先后顺序也能体现不同作用域变量的优先级. 如果变量无法被找到, 那就被视为空字符串. 同时, 在解引用时, 是否携带双引号都是可以的(`message(${val}) message("${val}")`), 解引用可以被嵌套使用, 即`${outer_${inner_variable}}_variable`, 将从内向外进行解引用. 对解引用添加特定字段, 可以要求其在特定的命名域下搜索变量, 比如`$ENV{variable}`表示从`cmake`自`shell`继承的环境变量里寻找, `$CAVHE{variable}`表示去持久缓存里寻找.
+
+`cmake`自己也有内置变量, 就是我们之前常写的`CMAKE_`等前缀变量.
+
+在`if()`语句中, 可以不使用`${}`直接使用变量, 即`if(variable)`, 除非含有特殊字段.
+
 # 完
