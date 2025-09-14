@@ -4413,4 +4413,147 @@ set(MY_VAR "new_value" CACHE STRING "desc" FORCE)
 
 在`if()`语句中, 可以不使用`${}`直接使用变量, 即`if(variable)`, 除非含有特殊字段.
 
+-----
+
+下面, 我们就通过实际的代码测试更深入地了解其中有关变量的知识.
+
+首先是关于函数作用域的
+
+```shell
+[wind@Ubuntu test_func_scop]$ tree .
+.
+└── CMakeLists.txt
+
+1 directory, 1 file
+[wind@Ubuntu test_func_scop]$ 
+```
+
+```cmake
+cmake_minimum_required(VERSION 3.18)
+
+project(FunctionScopDemo)
+
+# 自定义并初始化变量
+set(SCOP "Directory Scop")
+
+# 函数定义
+function(f)
+    # 读取上级作用域变量
+    message("func: ${SCOP}")
+endfunction(f)
+
+# 函数调用
+f()
+```
+
+```shell
+[wind@Ubuntu test_func_scop]$ mkdir build && cd build
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+func: Directory Scop
+-- Configuring done (0.9s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_func_scop/build
+```
+
+当运行一个函数体时, `cmake`会直接把目录作用域中的变量直接全部复制拷贝一下, 当做函数体中的初始化变量, 而在函数运行完毕后, 其中的这些被复制的变量也会被一统释放, 就像栈帧那样.(只不过传参方式不太相同) 既然函数体里面已经有`SCOP`, 那么打印时自然直接使用了这个离得"最近"的`SCOP`, 所以打印`Directory Scop`.
+
+下面演示在函数内部进行变量修改会发生什么
+
+![image-20250914201759489](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250914201759489.png)
+
+当`f`执行`  set(SCOP "Function Scop")`这个语句时, 因为函数体中本来就有`SCOP`(在进入函数体时就已经全部拷贝过了), 所以它还是选择对函数体里的`SCOP`进行修改, 而在第二次打印时, 由于打印语句在函数体里, 所以还是读取最近的`SCOP`, 这样就打印出了修改后的内容`Function Scop`. 
+
+而在第三次打印, 由于我们在整个过程中始终没有对目录作用域的`SCOP`进行修改, 所以他还是原来的值`Directory Scop`
+
+如果我们就是想修改目录作用域的`SCOP`, 就需要带上`PARENT_SCOPE` 
+
+![image-20250914203624314](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250914203624314.png)
+
+在这里, 由于我们的变量还是在进入函数时就已经被拷贝, 所以对于函数体里的`SCOP`, 它仍然是原值, `PARENT_SCOPE`会对目录作用域的`SCOP`造成影响, 可不会对函数体里的`SCOP`造成影响, 因此, 它始终是原值, 所以在第二次打印时显示`Directory Scop`, 而对第三次打印来说, 由于我们之前已经修改过了目录作用域里的`SCOP`, 所以打印了修改后的值`Function Scop`
+
+所以关键的一点是, 我们要认识到, `cmake`对于变量的拷贝策略是采用"饿汉"模式, 它不是像Linux那种"惰性"或者"懒汉"拷贝: 用的时候就拷贝, 而是在一开始就进行拷贝, 这在下面的实验中, 也是成立的. 至于`cmake`为什么采用这种策略, 我个人的推测是可能为了降低自身的复杂度, 一方面, 脚本它也不会有太多的变量, 另一方面, 它也不至于有太多层, 所以全拷贝性能开销并不太, 她不像操作系统那样太注重对资源的利用率.
+
+---
+
+下面我们看看由父目录到子目录的情况, 
+
+```shell
+[wind@Ubuntu test_dir_scop]$ tree .
+.
+├── CMakeLists.txt
+└── src
+    └── CMakeLists.txt
+
+2 directories, 2 files
+[wind@Ubuntu test_dir_scop]$ 
+```
+
+我们将在父目录中定义一个变量, 然后, 在父目录脚本和子目录脚本中分别打印它们
+
+```cmake
+cmake_minimum_required(VERSION 3.18)
+
+project(DirectScopDemo)
+
+set(SCOP "Parent Scop")
+
+add_subdirectory(src)
+
+message("main: ${SCOP}")
+```
+
+```cmake
+message("sub: ${SCOP}")
+
+set(SCOP "Sub Scop")
+
+message("sub: ${SCOP}")
+```
+
+```shell
+[wind@Ubuntu test_dir_scop]$ mkdir build && cd build
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+sub: Parent Scop
+sub: Sub Scop
+main: Parent Scop
+-- Configuring done (0.9s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_dir_scop/build
+[wind@Ubuntu build]$ 
+```
+
+正如我们之前提到的, `cmake`使用的是"饿汉"拷贝, 在进入子目录时, 他就已经把父目录的变量都拷贝下来了, 对于子目录来说, 查找`SCOP`访问的都是子目录下那个被拷贝的`SCOP`, 所以子目录的整个过程都是在圈地自萌, 你打印的是自己的`	SCOP`, 修改的也是自己的`SCOP`,  第二次打印的还是自己的`SCOP`, 第三次打印, 由于父目录的`SCOP`始终没有被修改, 所以始终都是原始值.
+
+同样的, 使用`PARENT_SCOPE`将会对原值进行修改
+
+![image-20250914221331605](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250914221331605.png)
+
+还是在`add_subdirectory`时就已经进行了全拷贝, 在子目录的唯一一次变量修改中, 改变的是父目录的变量, 所以子目录变量一直都是最开始拷贝下来的那个原值, 因此, 子目录的两次打印还是原值, 而对于第三次打印来说, 由于父目录变量被子目录修改, 所以变为了修改值. 
+
+如果你想有一个全局唯一的变量, 那就请用持久缓存
+
 # 完
