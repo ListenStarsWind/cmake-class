@@ -4398,7 +4398,7 @@ f(hello world)
 
 `Persistent Cache`持久缓存
 
-在`set`时, 如果添加`CACHE STRING`参数, 则会将变量写入持久缓存, 即`cmake`自己的全局配置中, 这样在本机的任何一个项目中都能使用该变量, 与C/C++类似, 持久缓存变量优先级低, 只在高优先级没有重名变量后才会被使用.
+在`set`时, 如果添加`CACHE STRING`参数, 则会将变量写入持久缓存, 即`cmake`自己的项目配置中, 这样在这个项目中的任何子目录都能使用该变量, 与C/C++类似, 持久缓存变量优先级低, 只在高优先级没有重名变量后才会被使用.
 
 ```cmake
 # 在任意一个脚本中定义持久缓存变量
@@ -4555,5 +4555,299 @@ main: Parent Scop
 还是在`add_subdirectory`时就已经进行了全拷贝, 在子目录的唯一一次变量修改中, 改变的是父目录的变量, 所以子目录变量一直都是最开始拷贝下来的那个原值, 因此, 子目录的两次打印还是原值, 而对于第三次打印来说, 由于父目录变量被子目录修改, 所以变为了修改值. 
 
 如果你想有一个全局唯一的变量, 那就请用持久缓存
+
+----
+
+接下来我们介绍持久缓存
+
+缓存变量解决的是"信息在多次`cmake`在多次调用之间, 以及在整个源码树各目录之间如何共享并持久化"的问题. 当我们使用缓存变量时, `cmake`就会把缓存变量写到构建目录的`CmakeCatch.txt`文件中, 通过文件的持久化, 以及变量定义指令在初始执行和后续执行的不同行为, 来实现了跨次数, 跨目录的信息传递.
+
+正如我们之前说的
+
+```cmake
+set(MY_VAR "new_value" CACHE STRING "desc")
+```
+
+可以设置缓存变量, 并且, 其在第一次项目配置和后续次项目配置的行为不同.
+
+```shell
+[wind@Ubuntu test_catch_scop]$ tree .
+.
+└── CMakeLists.txt
+
+1 directory, 1 file
+[wind@Ubuntu test_catch_scop]$ 
+```
+
+```cmake
+cmake_minimum_required(VERSION 3.18)
+
+project(CatchScopDemo)
+
+set(OS "linux" CACHE STRING "os name")
+
+message("OS: ${OS}")
+message("OS: $CACHE{OS}")
+```
+
+```shell
+[wind@Ubuntu test_catch_scop]$ mkdir build && cd build
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+OS: linux
+OS: linux
+-- Configuring done (0.9s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_catch_scop/build
+[wind@Ubuntu build]$ 
+```
+
+在这之后, 我们就能从构建目录的`CmakeCatch.txt`找到它
+
+![image-20250915083824770](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250915083824770.png)
+
+另外, 由于解引用是按照一定顺序寻找的, 所以相比使用`message("OS: ${OS}")`, `message("OS: $CACHE{OS}")`显然是更好的.
+
+对于第二次进行`cmake`配置, 或者说是`cmake`刷新的时候, 缓存变量仍会正常存在, 所以缓存变量是跨次数的.
+
+![image-20250915084323711](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250915084323711.png)
+
+在已有同名缓存变量存在的情况下, 相同的指令将不会起到覆写作用, 所以不同的配置次数现象将会不同
+
+```cmake
+cmake_minimum_required(VERSION 3.18)
+
+project(CatchScopDemo)
+
+set(OS "mac" CACHE STRING "os name")
+
+# message("OS: ${OS}")
+message("OS: $CACHE{OS}")
+```
+
+```shell
+[wind@Ubuntu build]$ cmake .
+OS: linux
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_catch_scop/build
+[wind@Ubuntu build]$ 
+```
+
+除非再加上`FORCE`选项, 否则都不会覆写
+
+![image-20250915084917101](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250915084917101.png)
+
+所以如果你不想让同样的`CmakeLists.txt`在你的目录和别人刚克隆下来的项目表现不同(克隆下来的没build)的话, 就可以带上这个行为, 让`cmake`每次配置行为相同
+
+```cmake
+cmake_minimum_required(VERSION 3.18)
+
+project(CatchScopDemo)
+
+set(OS "mac" CACHE STRING "os name" FORCE)
+
+# message("OS: ${OS}")
+message("OS: $CACHE{OS}")
+```
+
+```shell
+[wind@Ubuntu test_catch_scop]$ mkdir build && cd build
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+OS: mac
+-- Configuring done (0.9s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_catch_scop/build
+[wind@Ubuntu build]$ 
+```
+
+```cmake
+cmake_minimum_required(VERSION 3.18)
+
+project(CatchScopDemo)
+
+set(OS "linux" CACHE STRING "os name" FORCE)
+
+# message("OS: ${OS}")
+message("OS: $CACHE{OS}")
+```
+
+```shell
+[wind@Ubuntu build]$ cmake .
+OS: linux
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_catch_scop/build
+[wind@Ubuntu build]$ 
+```
+
+一直带上`FORCE`选项, 构建项目就会始终与`CmakeLists.txt`的内容为准, 而不会受到诸如配置次数, 文件修改的影响.
+
+除此之外, 也可以在配置时, 在命令后加上`-Dname=value`选项来实现命令行的缓存变量覆写
+
+![image-20250915090101274](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250915090101274.png)
+
+如果同时使用`	FORCE`和命令行方式覆写, 最后会以`FORCE`的内容为准, 也就是`FORCE`的优先级更高
+
+现在, 缓存文件是`win`, 接下来, `FORCE`是`linux`, 命令行是`mac`
+
+![image-20250915090410603](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250915090410603.png)
+
+-----
+
+接下来我们说环境变量.
+
+在一般情况下, `cmake`不会搜索环境变量, 除非是加上`ENV`选项. 具体来说, 环境变量有两种级别, 首先是`cmake`自己设置的环境变量, 对于这种环境变量, 在`cmake`进程结束后就自然结束. 而另一种, 则是`shell`的环境变量, `shell`作为操作系统的窗口, 将会锁系统一直运行, 它的环境变量, 具有持久性.
+
+```shell
+[wind@Ubuntu test_env_scop]$ tree .
+.
+└── CMakeLists.txt
+
+1 directory, 1 file
+[wind@Ubuntu test_env_scop]$
+```
+
+```cmake
+cmake_minimum_required(VERSION 3.18)
+
+project(EnvVarDemo)
+
+message("env: $ENV{OS}")
+```
+
+```shell
+[wind@Ubuntu test_env_scop]$ echo ${OS}
+
+[wind@Ubuntu test_env_scop]$ mkdir build && cd build
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+env: 
+-- Configuring done (0.9s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_env_scop/build
+[wind@Ubuntu build]$ 
+```
+
+我们看到, `shell`的环境变量中并没有`OS`, 自然, 在`cmake`中也找不到这个变量, 所以被解释为了空字符串, 下面, 我们让`cmake`自己新建一个环境变量
+
+```cmake
+cmake_minimum_required(VERSION 3.18)
+
+project(EnvVarDemo)
+
+message("env: $ENV{OS}")
+
+set(ENV{OS} "linux")
+
+message("env: $ENV{OS}")
+```
+
+```shell
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+env: 
+env: linux
+-- Configuring done (0.9s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_env_scop/build
+[wind@Ubuntu build]$ cmake .
+env: 
+env: linux
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_env_scop/build
+[wind@Ubuntu build]$ 
+```
+
+在我们把环境变量导入到`cmake`自己的地址空间之后, 我们看到, 就能打印出来了. 并且因为进程结束地址空间回收, 所以刷新的时候第一次还是没有看到它打印出来.
+
+接下来我们在`shell`中导入相应的环境变量
+
+```shell
+[wind@Ubuntu build]$ export OS=mac
+[wind@Ubuntu build]$ echo ${OS}
+mac
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+env: mac
+env: linux
+-- Configuring done (0.9s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_env_scop/build
+[wind@Ubuntu build]$ 
+```
+
+第一次读到的就是从`shell`那里继承下来的环境变量, 接下来`cmake`自己又对环境变量进行了修改, 所以第二次打印显示修改后的内容.
+
+-----
+
+下面我们说`cmake`中的`if`语句
+
+`cmake`的`if`支持许多功能, 我们先来看第一个, 也是最常用的一个, 基本表达式
+
+`if`可以对`()`中的表达式进行逻辑判断, 有以下几种规则
+
+在`cmake`中, 定义了许多能表达真假的常量. 比如如果常量为`1, ON, YES, TRUE, Y`(忽略大小写)或非零数字(包括浮点数), 就是True. 如果常量是`0, OFF, NO, FALSE, N, IGNORE, NOTFOUND`(不区分大小写)空字符串或以后缀`-ONTFOUND`为结尾, 则为False, 当参数不属于这些常量时, 将会被视为变量或字符串, 受到下面两段的制约.
+
+当括号中的内容是变量时, `cmake`会依据变量的值进行真假判断, 如果该变量被定义为一个非假常量的值则为真, 否则(包括变量未定义情况)都将被视为假. 注意环境变量不能通过这种方式进行测试, 如果解引用环境变量, 得到的结果将总是为假.
+
+而对于字符串来说, 也就是带上引号的字符串, 将始终为假, 除非, 这个字符串是真值常量的字面量, 又或者, 对于4.0之前的`cmake`, 字符串的字面量是受`CMP0054`策略影响的字符串(这个没人用).
 
 # 完
