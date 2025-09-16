@@ -4850,4 +4850,584 @@ env: linux
 
 而对于字符串来说, 也就是带上引号的字符串, 将始终为假, 除非, 这个字符串是真值常量的字面量, 又或者, 对于4.0之前的`cmake`, 字符串的字面量是受`CMP0054`策略影响的字符串(这个没人用).
 
+```sherll
+[wind@Ubuntu test_base_exp]$ tree .
+.
+└── CMakeLists.txt
+
+1 directory, 1 file
+[wind@Ubuntu test_base_exp]$ 
+```
+
+```cmake
+cmake_minimum_required(VERSION 3.18)
+
+project(IfBasicExprDemo)
+
+# 常量真
+if(ON)
+    message("ON: true")
+else()
+    message("ON: false")
+endif()
+
+# 常量真
+if(1)
+    message("1: true")
+else()
+    message("1: false")
+endif()
+
+# 常量假
+if(0)
+    message("0: true")
+else()
+    message("0: false")
+endif()
+
+# 常量假
+if(OFF)
+    message("OFF: true")
+else()
+    message("OFF: false")
+endif()
+
+# 常量真
+if(1.1)
+    message("1.1: true")
+else()
+    message("1.1: false")
+endif()
+
+# 常量假
+if(MYPATH-NOTFOUND)
+    message("MYPATH-NOTFOUND: true")
+else()
+    message("MYPATH-NOTFOUND: false")
+endif()
+
+# 字符串
+if("rabbit")
+    message("\"rabbit\": true")
+else()
+    message("\"rabbit\": false")
+endif()
+
+# 字面量为非假常量的变量
+set(FOOD "carrot")
+if(FOOD)
+    message("FOOD(carrot): true")
+else()
+    message("FOOD(carrot): false")
+endif()
+
+set(QUESTION "IGNORE")
+if(QUESTION)
+    message("QUESTION(IGNORE): true")
+else()
+    message("QUESTION(IGNORE): false")
+endif()
+
+# 字符串
+if("TRUE")
+    message("\"TRUE\": true")
+else()
+    message("\"TRUE\": false")
+endif()
+
+# 环境变量
+if($ENV{LOGNAME})
+    message("LOGNAME: true")
+else()
+    message("LOGNAME: false")
+endif()
+
+```
+
+```shell
+[wind@Ubuntu test_base_exp]$ mkdir build && cd build
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+ON: true
+1: true
+0: false
+OFF: false
+1.1: true
+MYPATH-NOTFOUND: false
+"rabbit": false
+FOOD(carrot): true
+QUESTION(IGNORE): false
+"TRUE": true
+LOGNAME: false
+-- Configuring done (0.9s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_base_exp/build
+[wind@Ubuntu build]$ 
+```
+
+接下来我们看第二个场景, 逻辑运算, 可以使用`NOT AND OR`进行非运算, 与运算, 或运算.
+
+```cmake
+# !
+if(NOT NO)
+    message("NOT NO: true")
+else()
+    message("NOT NO: false")
+endif()
+
+# &&
+if("on" AND "off")
+    message("\"on\" AND \"off\": true")
+else()
+    message("\"on\" AND \"off\": false")
+endif()
+
+# ||
+if("on" OR "off")
+    message("\"on\" OR \"off\": true")
+else()
+    message("\"on\" OR \"off\": false")
+endif()
+```
+
+```shell
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+ON: true
+1: true
+0: false
+OFF: false
+1.1: true
+MYPATH-NOTFOUND: false
+"rabbit": false
+FOOD(carrot): true
+QUESTION(IGNORE): false
+"TRUE": true
+LOGNAME: false
+NOT NO: true
+"on" AND "off": false
+"on" OR "off": true
+-- Configuring done (0.9s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_base_exp/build
+[wind@Ubuntu build]$ 
+```
+
+下面我们说`if`的又一个功能: 存在性检测, 用于检测各种东西是否存在.
+
+```cmake
+# 是否存在这种指令
+if(COMMAND project)
+    message("COMMAND project: true")
+else()
+    message("COMMAND project: false")
+endif()
+
+if(COMMAND ls)
+    message("COMMAND ls: true")
+else()
+    message("COMMAND ls: false")
+endif()
+
+# 是否存在这样的目标
+add_library(MyMath INTERFACE IMPORTED)
+if(TARGET MyMath)
+    message("TARGET MyMath: true")
+else()
+    message("TARGET MyMath: false")
+endif()
+
+# 是否定义这种变量
+
+## 普通变量
+if(DEFINED NAME)
+    message("DEFINED NAME: true")
+else()
+    message("DEFINED NAME: false")
+endif()
+
+if(DEFINED FOOD)
+    message("DEFINED FOOD: true")
+else()
+    message("DEFINED FOOD: false")
+endif()
+
+## 缓存变量
+set(NAME "wind" CACHE STRING "name")
+if(DEFINED NAME)
+    message("DEFINED NAME: true")
+else()
+    message("DEFINED NAME: false")
+endif()
+
+## 环境变量
+if(DEFINED ENV{PATH})
+    message("DEFINED ENV{PATH}: true")
+else()
+    message("DEFINED ENV{PATH}: false")
+endif()
+```
+
+```shell
+[wind@Ubuntu build]$ cmake ..
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+ON: true
+1: true
+0: false
+OFF: false
+1.1: true
+MYPATH-NOTFOUND: false
+"rabbit": false
+FOOD(carrot): true
+QUESTION(IGNORE): false
+"TRUE": true
+LOGNAME: false
+NOT NO: true
+"on" AND "off": false
+"on" OR "off": true
+COMMAND project: true
+COMMAND ls: false
+TARGET MyMath: true
+DEFINED NAME: false
+DEFINED FOOD: true
+DEFINED NAME: true
+DEFINED ENV{PATH}: true
+-- Configuring done (0.9s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_base_exp/build
+[wind@Ubuntu build]$ 
+```
+
+ 接下里有关`if`的文件检测,
+
+```cmake
+# 是否存在这样的文件或目录, 并可读
+if(EXISTS ${CMAKE_CURRENT_LIST_FILE})
+    message([==[EXISTS ${CMAKE_CURRENT_LIST_FILE}: true]==])  # 这种写法是让它不要解引用[==[...]==]
+else()
+    message([==[EXISTS ${CMAKE_CURRENT_LIST_FILE}: false]==])
+endif()
+
+if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/main.cpp)
+    message([==[EXISTS ${CMAKE_CURRENT_LIST_DIR}/main.cpp: true]==])
+else()
+    message([==[EXISTS ${CMAKE_CURRENT_LIST_DIR}/main.cpp: false]==])
+endif()
+
+# 空路径视为假
+if(EXISTS "")
+    message("EXISTS \"\": true")
+else()
+    message("EXISTS \"\": false")
+endif()
+
+# 不支持相对路径, 未定义行为
+if(EXISTS "./CMakeLists.txt")
+    message("EXISTS \"./CMakeLists.txt\": true")
+else()
+    message("EXISTS \"./CMakeLists.txt\": false")
+endif()
+```
+
+```shell
+[wind@Ubuntu build]$ cmake ..
+ON: true
+1: true
+0: false
+OFF: false
+1.1: true
+MYPATH-NOTFOUND: false
+"rabbit": false
+FOOD(carrot): true
+QUESTION(IGNORE): false
+"TRUE": true
+LOGNAME: false
+NOT NO: true
+"on" AND "off": false
+"on" OR "off": true
+COMMAND project: true
+COMMAND ls: false
+TARGET MyMath: true
+DEFINED NAME: true
+DEFINED FOOD: true
+DEFINED NAME: true
+DEFINED ENV{PATH}: true
+EXISTS ${CMAKE_CURRENT_LIST_FILE}: true
+EXISTS ${CMAKE_CURRENT_LIST_DIR}/main.cpp: false
+EXISTS "": false
+EXISTS "./CMakeLists.txt": false
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_base_exp/build
+[wind@Ubuntu build]$ 
+```
+
+下面我们说有关`if`的比较
+
+```cmake
+# 给定字符串是否与正则表达式匹配
+if(google MATCHES goo+gle)
+    message("google MATCHES goo+gle: true")
+else()
+    message("google MATCHES goo+gle: false")
+endif()
+
+# a < b ?  按照实数大小进行比较
+if("20" LESS "30")
+    message("\"20\" LESS \"30\": true")
+else()
+    message("\"20\" LESS \"30\": false")
+endif()
+
+# a > b ?
+if("1" GREATER "0")
+    message("\"1\" GREATER \"0\": true")
+else()
+    message("\"1\" GREATER \"0\": false")
+endif()
+
+# a < b ? 按照字典序大小比较
+if("abc" STRLESS "abd")
+    message("\"abc\" STRLESS \"abd\": true")
+else()
+    message("\"abc\" STRLESS \"abd\": false")
+endif()    
+
+# a < b ? 
+if("found" STRGREATER "eaten")
+    message("\"found\" STRGREATER \"eaten\": true")
+else()
+    message("\"found\" STRGREATER \"eaten\": false")
+endif()    
+```
+
+```shell
+[wind@Ubuntu build]$ cmake ..
+ON: true
+1: true
+0: false
+OFF: false
+1.1: true
+MYPATH-NOTFOUND: false
+"rabbit": false
+FOOD(carrot): true
+QUESTION(IGNORE): false
+"TRUE": true
+LOGNAME: false
+NOT NO: true
+"on" AND "off": false
+"on" OR "off": true
+COMMAND project: true
+COMMAND ls: false
+TARGET MyMath: true
+DEFINED NAME: true
+DEFINED FOOD: true
+DEFINED NAME: true
+DEFINED ENV{PATH}: true
+EXISTS ${CMAKE_CURRENT_LIST_FILE}: true
+EXISTS ${CMAKE_CURRENT_LIST_DIR}/main.cpp: false
+EXISTS "": false
+EXISTS "./CMakeLists.txt": false
+google MATCHES goo+gle: true
+"20" LESS "30": true
+"1" GREATER "0": true
+"abc" STRLESS "abd": true
+"found" STRGREATER "eaten": true
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_base_exp/build
+[wind@Ubuntu build]$ 
+```
+
+下面我们说与`if`有关的版本号比较, 对于不同版本的客户端, 由于其所支持的功能可能不同, 因此服务端也应该有与之对应的行为.
+
+```cmake
+## 比1.3.0小, 说明是老版本, 有些功能不支持
+if(VERSION VERSION_LESS "1.3.0")
+    message("VERSION VERSION_LESS \"1.3.0\": true")
+else()
+    message("VERSION VERSION_LESS \"1.3.0\": false")
+endif()
+```
+
+```shell
+VERSION VERSION_LESS "1.3.0": true
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_base_exp/build
+[wind@Ubuntu build]$ 
+```
+
+对于`if`, 还有一些功能, 比如使用`PATH_EQUAL`进行路径匹配, 两个路径完全相同, 则返回真, 比如变量扩展, `cmake`的`if`编写早于`${}`编写的时间, 所以`if`对于其中的普通变量, 会自动进行解引用, 即对于普通变量`varl`, `if(varl)`和`if(${varl}`实际上是同一种写法, 注意, 缓存变量和环境变量不支持自动解引用, 还是需要`$CACHE{}`或者`$ENV{}`进行手动解引用.
+
+---------
+
+`cmake`中有两种循环语句, `foreach`和`while`, 下面我们介绍`cmake`中的`foreach`循环语法.
+
+`foreach`的基本语法如下
+
+```cmake
+foreach(<loop_var> <items>)
+  <commands>
+endforeach()
+```
+
+其中, `loop_var`是循环变量, `items`是由分号或空格分隔的项列表, 每次迭代开始前, `loop_var`会被设置为当前项的值.对于循环体的变量, 与C/C++性质相同, 除此之外, 他也允许使用`break()`或`continue()`命令脱离正常的循环流.
+
+```cmake
+cmake_minimum_required(VERSION 3.18)
+
+project(ForeachDemo)
+
+foreach(X1 "1" "2;3;4" "abc")
+    message(STATUS "X1: ${X1}")
+endforeach()
+
+```
+
+```shell
+[wind@Ubuntu test_foreach]$ mkdir build && cd build 
+[wind@Ubuntu build]$ cmake ..
+cmake: /usr/local/lib/libcurl.so.4: no version information available (required by cmake)
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- X1: 1
+-- X1: 2;3;4
+-- X1: abc
+-- Configuring done (0.8s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_foreach/build
+[wind@Ubuntu build]$ 
+```
+
+循环的项分别是`1   2;3;4   abc`这三个字符串
+
+`RANGE`默认会从数字"0"开始, 一直以一的步长进行迭代, 直到到达并包含终止数字
+
+```cmake
+foreach(X2 RANGE 9)
+    message(STATUS "X2: ${X2}")
+endforeach()
+```
+
+ ```shell
+ -- X2: 0
+ -- X2: 1
+ -- X2: 2
+ -- X2: 3
+ -- X2: 4
+ -- X2: 5
+ -- X2: 6
+ -- X2: 7
+ -- X2: 8
+ -- X2: 9
+ -- Configuring done (0.0s)
+ -- Generating done (0.0s)
+ -- Build files have been written to: /home/wind/cmakeClass/test_foreach/build
+ [wind@Ubuntu build]$ 
+ ```
+
+`RANGE`也可以设置起始数字和步长
+
+```cmake
+foreach(X3 RANGE 10 20 3)
+    message(STATUS "X3: ${X3}")
+endforeach()
+```
+
+```shell
+-- X3: 10
+-- X3: 13
+-- X3: 16
+-- X3: 19
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_foreach/build
+[wind@Ubuntu build]$ 
+```
+
+`IN ITEMS`其实就是`foreach`的默认行为, 也就是第一种
+
+```cmake
+foreach(X4 IN ITEMS "1" "2;3;4" "abc")
+    message(STATUS "X4: ${X4}")
+endforeach()
+```
+
+```shell
+-- X4: 1
+-- X4: 2;3;4
+-- X4: abc
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_foreach/build
+[wind@Ubuntu build]$ 
+```
+
+`IN LISTS`则是对变量进行遍历的选项, 其中的变量, 如果它们的值是允许的, 则会被再解析, 直到其不再是项列表
+
+```cmake
+set(L1 "1")
+set(L2 "2;3;4")
+set(L3 "abc")
+foreach(X5 IN LISTS L1 L2 L3)
+    message(STATUS "X5: ${X5}")
+endforeach()
+```
+
+```shell
+-- X5: 1
+-- X5: 2
+-- X5: 3
+-- X5: 4
+-- X5: abc
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_foreach/build
+[wind@Ubuntu build]$ 
+```
+
 # 完
