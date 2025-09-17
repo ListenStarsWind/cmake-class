@@ -5430,4 +5430,346 @@ endforeach()
 [wind@Ubuntu build]$ 
 ```
 
+下面我们来看`while`循环, `while`将在条件为真时不断循环, 与`foreach`相比, `while`的迭代是手动控制的, 而不是像`foreach`那样通过项列表进行迭代, 所以要注意循环体内对循环变量的调整, 以防止无线循环的出现.
+
+```cmake
+set(i 1)
+# 当i <= 5时
+while(i LESS_EQUAL 5)
+    message(STATUS "i = ${i}")
+    math(EXPR i "${i} + 1")   # i++
+endwhile()
+```
+
+```shell
+-- i = 1
+-- i = 2
+-- i = 3
+-- i = 4
+-- i = 5
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_foreach/build
+[wind@Ubuntu build]$ 
+```
+
+-----------
+
+接下来, 我们说函数`list`, 该函数是为了对`cmake`的列表这种数据结构进行操作而生的, 之前我们也说过, 列表在`Cmake`中是一组由分号分隔的值.
+
+`list`支持对列表的许多操作, 具体信息请查询[官方文档](https://cmake.org/cmake/help/latest/command/list.html), 下面, 我们将列举其中的部分常用操作
+
+```cmake
+Reading
+  list(LENGTH <list> <out-var>)
+  list(GET <list> <element index> [<index> ...] <out-var>)
+  list(JOIN <list> <glue> <out-var>)
+  list(SUBLIST <list> <begin> <length> <out-var>)
+
+Search
+  list(FIND <list> <value> <out-var>)
+
+Modification
+  list(APPEND <list> [<element>...])
+  list(FILTER <list> {INCLUDE | EXCLUDE} REGEX <regex>)
+  list(INSERT <list> <index> [<element>...])
+  list(POP_BACK <list> [<out-var>...])
+  list(POP_FRONT <list> [<out-var>...])
+  list(PREPEND <list> [<element>...])
+  list(REMOVE_ITEM <list> <value>...)
+  list(REMOVE_AT <list> <index>...)
+  list(REMOVE_DUPLICATES <list>)
+  list(TRANSFORM <list> <ACTION> [...])
+
+Ordering
+  list(REVERSE <list>)
+  list(SORT <list> [...])
+```
+
+```shell
+[wind@Ubuntu test_list]$ tree .
+.
+└── CMakeLists.txt
+
+1 directory, 1 file
+[wind@Ubuntu test_list]$ 
+```
+
+```cmake
+cmake_minimum_required(VERSION 3.18)
+
+project(ListDemo)
+
+# 创建列表 如果用;分隔就不要再带空格了, 否则会解析错误
+set(SRCS "main.cpp;utils.cpp;math.cpp")
+
+# 添加新项
+list(APPEND SRCS "network.cpp")
+message(STATUS "add: ${SRCS}")
+
+# 移除元素
+list(REMOVE_ITEM SRCS "math.cpp")
+message(STATUS "remove: ${SRCS}")
+
+# 排序
+list(SORT SRCS)
+message(STATUS "sort: ${SRCS}")
+
+# 遍历列表
+foreach(file ${SRCS})
+    message(STATUS "file: ${file}")
+endforeach()
+
+# 求长度
+list(LENGTH SRCS LEN)
+message(STATUS "len: ${LEN}")
+```
+
+```shell
+[wind@Ubuntu test_list]$ mkdir build && cd build
+[wind@Ubuntu build]$ cmake ..
+cmake: /usr/local/lib/libcurl.so.4: no version information available (required by cmake)
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- add: main.cpp;utils.cpp;math.cpp;network.cpp
+-- remove: main.cpp;utils.cpp;network.cpp
+-- sort: main.cpp;network.cpp;utils.cpp
+-- file: main.cpp
+-- file: network.cpp
+-- file: utils.cpp
+-- len: 3
+-- Configuring done (0.8s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_list/build
+[wind@Ubuntu build]$ 
+```
+
+----
+
+接下来我们介绍函数. `cmake`的函数和C++函数差不了太多, 所以下面我们就主要介绍一下`cmake`函数和C++函数不同的地方.
+
+首先, 在`cmake`的函数内, 会自动生成一组和参数有关的特殊变量
+
+- ARGC       :   实参个数
+- ARGV       :   由所有实参构成的项列表
+- ARGV<n\>:  从零开始的第n个实参项
+- ARGN       :  除去形参部分还剩下的实参列表
+
+在`cmake`中, 函数的实参和形参在数量上可以不同, 因此形参和实参的分别更加明显. 在定义实参时, 你可以给它定义两个形参, 但实际调用时, 可以给他传递两个, 三个, 四个, 五个... 实参. 这样的话, 实参列表中的第三个, 第四个, 第五个项...就成为了剩余实参.
+
+```shell
+[wind@Ubuntu test_func]$ tree .
+.
+└── CMakeLists.txt
+
+1 directory, 1 file
+[wind@Ubuntu test_func]$
+```
+
+ ```cmake
+ cmake_minimum_required(VERSION 3.18)
+ 
+ project(FunctionDemo)
+ 
+ function(print_args first second)
+     message(STATUS "ARGC: ${ARGC}") # 实参个数
+     message(STATUS "ARGV: ${ARGV}") # 实参列表, 实际上就是分号隔开的字符串
+ 
+     math(EXPR end "${ARGC} - 1")    # 打印实参列表中的各个项
+     foreach(i RANGE ${end})
+         message(STATUS "ARGV${i}: ${ARGV${i}}")
+     endforeach()
+ 
+     message(STATUS "ARGN: ${ARGN}")
+ endfunction()
+ 
+ print_args(A B C D E)
+ ```
+
+```shell
+[wind@Ubuntu test_func]$ mkdir build && cd build
+[wind@Ubuntu build]$ cmake ..
+cmake: /usr/local/lib/libcurl.so.4: no version information available (required by cmake)
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- ARGC: 5
+-- ARGV: A;B;C;D;E
+-- ARGV0: A
+-- ARGV1: B
+-- ARGV2: C
+-- ARGV3: D
+-- ARGV4: E
+-- ARGN: C;D;E
+-- Configuring done (0.8s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_func/build
+[wind@Ubuntu build]$ 
+```
+
+与C/C++函数稍有不同的, `cmake`的函数在名义上是没有返回值的, 如果想要返回值, 无非通过两点
+
+- 使用`PARENT_SCOPE`把返回值写到父级目录中
+- 把返回值写到持久缓存里
+
+```cmake
+function(sum x y)
+    math(EXPR RESULT "${x} + ${y}")
+    set(LOCAL_SUM ${RESULT})                            # 局部变量
+    set(OUTPUT_SUM ${RESULT} PARENT_SCOPE)              # 父级作用域变量
+    set(CACHE_SUM ${RESULT} CACHE STRING "result")      # 缓存变量
+endfunction()
+
+sum(3 5)
+
+message(STATUS "LOCAL_SUM: ${LOCAL_SUM}")
+message(STATUS "OUTPUT_SUM: ${OUTPUT_SUM}")
+message(STATUS "CACHE_SUM: $CACHE{CACHE_SUM}")
+```
+
+```shell
+-- LOCAL_SUM: 
+-- OUTPUT_SUM: 8
+-- CACHE_SUM: 8
+-- Configuring done (0.9s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/test_func/build
+[wind@Ubuntu build]$ 
+```
+
+## 第五章
+
+下面我们进入第五章, 这一章是对使用`cmake`构建的知名项目中的`cmake`代码进行分析.
+
+首先是`jsoncpp`
+
+我们使用下面的项目进行参考, 其中的`cmake`文件已被注释
+
+```shell
+git clone https://gitee.com/lizhengping189/jsoncpp.git
+```
+
+从中我们可以看到有七个`CMakeLists.txt`文件
+
+```shell
+[wind@Ubuntu jsoncpp]$ find -name "CMakeLists.txt"
+./example/CMakeLists.txt
+./src/jsontestrunner/CMakeLists.txt
+./src/test_lib_json/CMakeLists.txt
+./src/lib_json/CMakeLists.txt
+./src/CMakeLists.txt
+./include/CMakeLists.txt
+./CMakeLists.txt
+[wind@Ubuntu jsoncpp]$ 
+```
+
+第一个文件`./example/CMakeLists.txt`描述如何构建`jsoncpp`的演示代码, 第二个是`jsoncpp`的一个测试程序, 第三个也是测试程序, 第四个是最重要的, 描述动静态库链接的`CMakeLists.txt`, 第五个负责对源码进行编译, 第六个负责安装头文件, 第七个是顶层`CMakeLists.txt`.
+
+接下来, 我们就来看看`cmake`提供的功能和函数是如何满足以下需求的
+
+- 环境监测
+- 针对不同编译器设置不同的编译选项
+- 变量定义
+- 功能开启选项
+- 集成测试例子
+- `cmake`版本兼容
+- 导出到构建目录
+- 导出到安装目录
+- 安装头文件
+- 安装pkg-config对应的pc配置文件
+- 安装静态库和动态库
+- 安装find_package的config模式配置文件
+
+首先我们看环境监测.
+
+在`cmake`的配置阶段, 它会依据当前主机, 所选生成器, 用户提供的工具链或环境变量, 对编译器, 平台, 库, 函数, 头文件等"环境信息"进行检测, 并把结果存入缓存变量, 随后, 所有的`CMakeLists.txt`文件都可以通过这些变量(或find_package/`cmake`模块)来做条件判断, 生成目标或添加编译选项.
+
+比如, 相关的变量和设置有
+
+- CMAKE_SYSTEM_NAME: 系统名, 比如Windows/Linux/Darwin(苹果内核)/Android
+- CMAKE_SYSTEM_VERSION: 系统版本
+- CMAKE_SYSTEM_PROCESSOR: CPU架构, 如x86_64, armv8
+- CMAKE_HOST_SYSTEM_NAME: 配置机(host)的系统名
+- CAMKE_CROSSCOMPILING: 布尔值, TRUE表示启用跨平台交叉编译
+
+```shell
+[wind@Ubuntu jsoncpp]$ mkdir build && cd build
+[wind@Ubuntu build]$ cmake ..
+cmake: /usr/local/lib/libcurl.so.4: no version information available (required by cmake)
+-- The CXX compiler identification is Clang 18.1.3
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/clang++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- JsonCpp Version: 1.9.7
+-- Looking for memset_s
+-- Looking for memset_s - not found
+-- Looking for C++ include clocale
+-- Looking for C++ include clocale - found
+-- Looking for localeconv
+-- Looking for localeconv - found
+-- Looking for C++ include sys/types.h
+-- Looking for C++ include sys/types.h - found
+-- Looking for C++ include stdint.h
+-- Looking for C++ include stdint.h - found
+-- Looking for C++ include stddef.h
+-- Looking for C++ include stddef.h - found
+-- Check size of lconv
+-- Check size of lconv - done
+-- Performing Test HAVE_DECIMAL_POINT
+-- Performing Test HAVE_DECIMAL_POINT - Success
+-- Found Python3: /usr/bin/python3 (found version "3.12.3") found components: Interpreter 
+-- Configuring done (5.0s)
+-- Generating done (0.1s)
+-- Build files have been written to: /home/wind/jsoncpp/build
+[wind@Ubuntu build]$ ls
+bin             CMakeFiles           compile_commands.json  DartConfiguration.tcl  jsoncppConfig.cmake         lib       pkg-config  Testing
+CMakeCache.txt  cmake_install.cmake  CTestTestfile.cmake    include                jsoncppConfigVersion.cmake  Makefile  src         version
+[wind@Ubuntu build]$ 
+```
+
+我这台机器用的是`clang`, 默认情况下它会用`g++`, 但我在`~/.bashrc`指定它使用`clang`了.
+
+我们看到它首先对使用的编译器进行了探测. 然后又进行了很多检查, 也就是中间的那堆`Looking for`.
+
+在`./CMakeFiles/3.28.3/`下, 我们可以看到`cmake`的检查结果, 这里的`3.28.3`是`cmake`的版本
+
+```shell
+[wind@Ubuntu build]$ cd ./CMakeFiles/3.28.3/
+[wind@Ubuntu 3.28.3]$ ls
+CMakeCXXCompiler.cmake  CMakeDetermineCompilerABI_CXX.bin  CMakeSystem.cmake  CompilerIdCXX
+[wind@Ubuntu 3.28.3]$ cmake --version
+cmake: /usr/local/lib/libcurl.so.4: no version information available (required by cmake)
+cmake version 3.28.3
+
+CMake suite maintained and supported by Kitware (kitware.com/cmake).
+[wind@Ubuntu 3.28.3]$ 
+```
+
+该目录下的`CMakeSystem.cmake`就描述了与平台体系相关的探测结果, `CMakeCXXCompiler.cmake `是和编译器相关的
+
+![image-20250917123442297](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250917123442297.png)
+
+
+
 # 完
