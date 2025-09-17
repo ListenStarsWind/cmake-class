@@ -24,3 +24,10 @@ set(L3 "abc")
 foreach(X5 IN LISTS L1 L2 L3)
     message(STATUS "X5: ${X5}")
 endforeach()
+
+set(i 1)
+# 当i <= 5时
+while(i LESS_EQUAL 5)
+    message(STATUS "i = ${i}")
+    math(EXPR i "${i} + 1")   # i++
+endwhile()
