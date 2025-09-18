@@ -5770,6 +5770,205 @@ CMake suite maintained and supported by Kitware (kitware.com/cmake).
 
 ![image-20250917123442297](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250917123442297.png)
 
+除此之外, `cmake`为了适配各个平台下的生成器, 它自带了一堆`.rst`文件, 这些文件构成了`cmake`的生成器适配层, 可以将某个`cmake`指令翻译成对应的生成器指令, 是`cmake`得以跨平台的重要凭借
+
+```shell
+[wind@Ubuntu 3.28.3]$ ls /usr/share/cmake-*/Help/generator
+'Borland Makefiles.rst'   Kate.rst                 'NMake Makefiles JOM.rst'    'Visual Studio 11 2012.rst'  'Visual Studio 17 2022.rst'      'Visual Studio 9 2008.rst'
+ CodeBlocks.rst          'MinGW Makefiles.rst'     'NMake Makefiles.rst'        'Visual Studio 12 2013.rst'  'Visual Studio 6.rst'             VS_TOOLSET_HOST_ARCH_LEGACY.txt
+ CodeLite.rst            'MSYS Makefiles.rst'      'Sublime Text 2.rst'         'Visual Studio 14 2015.rst'  'Visual Studio 7 .NET 2003.rst'   VS_TOOLSET_HOST_ARCH.txt
+'Eclipse CDT4.rst'       'Ninja Multi-Config.rst'  'Unix Makefiles.rst'         'Visual Studio 15 2017.rst'  'Visual Studio 7.rst'            'Watcom WMake.rst'
+'Green Hills MULTI.rst'   Ninja.rst                'Visual Studio 10 2010.rst'  'Visual Studio 16 2019.rst'  'Visual Studio 8 2005.rst'        Xcode.rst
+[wind@Ubuntu 3.28.3]$ 
+```
+
+我们看到有正在被我们使用的`Makefile`, 有更高效率的`Ninja`, 还有一堆`Visual Studio`
+
+`CMakeCXXCompiler.cmake`则描述了编译器探测结果, 
+
+![image-20250918092226594](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250918092226594.png)
+
+我们可以在项目中查询一个参数, 比如描述编译里类别的`CMAKE_CXX_COMPILER_ID`
+
+![image-20250918092546609](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250918092546609.png)
+
+之后我们就可以看到项目针对不同编译器所作出的适配
+
+![image-20250918092800756](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250918092800756.png)
+
+![image-20250918093529791](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250918093529791.png)
+
+在项目配置阶段我们也能看到各种检查
+
+```shell
+-- Looking for memset_s
+-- Looking for memset_s - not found
+-- Looking for C++ include clocale
+-- Looking for C++ include clocale - found
+-- Looking for localeconv
+-- Looking for localeconv - found
+-- Looking for C++ include sys/types.h
+-- Looking for C++ include sys/types.h - found
+-- Looking for C++ include stdint.h
+-- Looking for C++ include stdint.h - found
+-- Looking for C++ include stddef.h
+-- Looking for C++ include stddef.h - found
+```
+
+`memset_s`是一个内存初始化函数, 比`memset`更加安全, 各种意义上, 不过我们也可以看到, 本平台并不支持, 我们可以通过查询`check_function_exists`来搜索对应的`cmake`原码
+
+```cmake
+# 检查系统是否存在 memset_s 函数
+include(CheckFunctionExists)
+check_function_exists(memset_s HAVE_MEMSET_S)
+# 若存在 memset_s 函数，则定义宏 HAVE_MEMSET_S
+if(HAVE_MEMSET_S)
+    add_definitions("-DHAVE_MEMSET_S=1")
+endif()
+```
+
+ 我们接着搜索宏定义`HAVE_MEMSET_S`, 就能看到这样的一个函数实现
+
+```cpp
+void deallocate(pointer p, size_type n) {
+    // 这些操作在优化时不会被编译器移除，
+    // unlike memset 意思是普通 memset 可能会被优化掉
+#if defined(HAVE_MEMSET_S)
+    memset_s(p, n * sizeof(T), 0, n * sizeof(T));
+#elif defined(_WIN32)
+    RtlSecureZeroMemory(p, n * sizeof(T));
+#else
+    std::fill_n(reinterpret_cast<volatile unsigned char*>(p), n, 0);
+#endif
+
+    // 使用全局 operator delete 释放内存
+    ::operator delete(p);
+}
+
+```
+
+这是一个C++经典的内存安全释放函数, 会先把内存快清零(保证不内存泄露地清零), 然后再释放, 防止直接释放带来的可能的内部敏感数据泄露. 在实际运行时, 因为我们没有定义宏`HAVE_MEMSET_S`, 也不是Windows, 因此最后会用C++标准的 `fill_n`.
+
+还有检查头文件的
+
+```cmake
+# 检查是否存在 clocale 头文件
+check_include_file_cxx(clocale HAVE_CLOCALE)
+# 检查 clocale 头文件中是否存在 localeconv 符号
+check_cxx_symbol_exists(localeconv clocale HAVE_LOCALECONV)
+```
+
+`clocale`涉及到对浮点数 / 数字的序列化处理, 所以`josncpp`需要特别检查
+
+```cmake
+# 若缺少必要的本地化功能支持
+if(NOT (HAVE_CLOCALE AND HAVE_LCONV_SIZE AND HAVE_DECIMAL_POINT AND HAVE_LOCALECONV))
+    # 输出警告信息
+    message(WARNING "Locale functionality is not supported")
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.12.0)
+        # 使用 CMake 3.12 及以上版本的新语法定义宏
+        add_compile_definitions(JSONCPP_NO_LOCALE_SUPPORT)
+    else()
+        # 使用旧语法定义宏
+        add_definitions(-DJSONCPP_NO_LOCALE_SUPPORT)
+    endif()
+endif()
+```
+
+还有`find_package`
+
+```cmake
+# 检查 CMake 版本是否大于等于 3.12.0
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.12.0)
+    # CMake 3.12.0 及以上版本使用新的 Python3 模块，该模块比旧的 PythonInterp 更健壮
+    find_package(Python3 COMPONENTS Interpreter)
+    # 设置变量以兼容 CMake 版本小于 3.12.0 的情况
+    set(PYTHONINTERP_FOUND ${Python3_Interpreter_FOUND})
+    set(PYTHON_EXECUTABLE ${Python3_EXECUTABLE})
+else()
+    # 为旧版本 CMake 指定额外的 Python 版本，这里指定为 3.8
+    set(Python_ADDITIONAL_VERSIONS 3.8)
+    # 使用旧的 PythonInterp 模块查找 Python 3
+    find_package(PythonInterp 3)
+endif()
+```
+
+`josncpp`在功能上完全是C++实现的, 这里要Python可能只是测试或者代码演示需要
+
+----------
+
+接下来我们看看`jsoncpp`在`cmake`中如何定义和使用变量.
+
+在此之前, 我们先回顾一下`cmake`中的和变量相关的知识
+
+```cmake
+# Set Normal Variable 一般变量
+set(<variable> <value>... [PARENT_SCOPE])
+
+# Set Cache Entry 缓存条目
+set(<variable> <value>... CACHE <type> <docstring> [FORCE])
+
+# Set Environment Variable 环境变量
+set(ENV{<variable>} [<value>])
+```
+
+尽管`Cache Entry`有所谓"类型"的说法, 但是, 在`cmake`, 所有的变量, 在底层其实都是字符串, 只不过它们被真正使用时有着不同的解释方法, 从而有了类型这个概念.
+
+对于变量来说, 在`if`中, 将默认为真, 除非变量不存在或者变量的值是假常量, 显式字符串则与之正好相反, 默认都为假, 除非字符串字面量为真常量.
+
+如果我们搜索`set(`, 就能在`josncpp`中发现不少的变量定义
+
+![image-20250918113323573](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250918113323573.png)
+
+搜索`CACHE`就能找到缓存变量定义
+
+![image-20250918113653581](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250918113653581.png)
+
+当我们的变量以特定格式(以空格' '或分号分隔';')赋值时, 这个变量就会被解释为列表
+
+```cmake
+set(srcs a.c b.c c.c) # sets "srcs" to "a.c;b.c;c.c"
+```
+
+在`example/CMakeLists.txt`中, 我们就看到了列表的应用
+
+```cmake
+set(EXAMPLES
+    readFromString
+    readFromStream
+    stringWrite
+    streamWrite
+)
+
+# 遍历示例程序列表，为每个示例创建可执行文件
+foreach(example ${EXAMPLES})
+    # 创建可执行文件，源文件为对应子目录下的同名 .cpp 文件
+    add_executable(${example} ${example}/${example}.cpp)
+    # 为可执行文件添加公共包含目录，指向项目的 include 目录
+    target_include_directories(${example} PUBLIC ${CMAKE_SOURCE_DIR}/include)
+    # 将可执行文件与 jsoncpp_lib 库进行链接
+    target_link_libraries(${example} jsoncpp_lib)
+endforeach()
+```
+
+我们看到, 它以循环+列表的形式, 进行了批量化的示例程序目标添加
+
+对于环境变量, 源码目录下到没有, 只有构建目录中存在
+
+```shell
+[wind@Ubuntu jsoncpp]$ grep 'ENV' build -rn
+build/src/lib_json/cmake_install.cmake:47:      "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/lib/libjsoncpp.so.1.9.7"
+build/src/lib_json/cmake_install.cmake:48:      "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/lib/libjsoncpp.so.27"
+build/src/lib_json/cmake_install.cmake:62:      "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/lib/libjsoncpp.so.1.9.7"
+build/src/lib_json/cmake_install.cmake:63:      "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/lib/libjsoncpp.so.27"
+build/CMakeFiles/3.28.3/CMakeCXXCompiler.cmake:37:set(CMAKE_CXX_COMPILER_ENV_VAR "CXX")
+build/cmake_install.cmake:50:  if(EXISTS "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/lib/cmake/jsoncpp/jsoncpp-targets.cmake")
+build/cmake_install.cmake:52:         "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/lib/cmake/jsoncpp/jsoncpp-targets.cmake"
+build/cmake_install.cmake:55:      file(GLOB _cmake_old_config_files "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/lib/cmake/jsoncpp/jsoncpp-targets-*.cmake")
+build/cmake_install.cmake:58:        message(STATUS "Old export file \"$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/lib/cmake/jsoncpp/jsoncpp-targets.cmake\" will be replaced.  Removing files [${_cmake_old_config_files_text}].")
+[wind@Ubuntu jsoncpp]$ 
+```
+
 
 
 # 完
