@@ -5969,6 +5969,420 @@ build/cmake_install.cmake:58:        message(STATUS "Old export file \"$ENV{DEST
 [wind@Ubuntu jsoncpp]$ 
 ```
 
+------
+
+接下来我们介绍在`cmake`项目中如何定义并使用"功能开关". 功能开关其实就是`cmake`中一些与项目功能有关的布尔变量, 不过因为经常被使用, 所以分化出了特定的接口.
+
+`cmake`使用`option`这个接口, 供我们定义"功能开关", 由于这种功能性的开关是要跨构建次数的持久存在的, 所以它们都是被放进持久缓存的.
+
+```cmake
+option(<variable> "<help_text>" [value])
+```
+
+如果该变量之前并未设置(持久缓存或一般变量), 则将该变量设置进持久缓存, 在这种情况下, 如果`value`未提供, 将被缺省为`OFF`, 否则(在之前已有定义), 则该函数不进行任何操作.
+
+当然你也可以不使用`option`, `set(<variable> [value] BOOL "" FORCE)`(FORCE表示强制更新, 之前存在同名缓存变量则覆写), 甚至是`-Dvariable=value`(这个也是强制刷新)
+
+在`code`中搜索`option`字段, 就会发现`jsoncpp`定义了很多"功能开关"
+
+![image-20250919083811150](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250919083811150.png)
+
+项目配置阶段完成后, 我们亦能在`build/CMakeCache.txt`找到这些缓存变量
+
+![image-20250919084238265](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250919084238265.png)
+
+使用的时候就借助于`if`进行判断
+
+![image-20250919084634104](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250919084634104.png)
+
+![image-20250919085108420](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250919085108420.png)
+
+-----
+
+接下来我们看看`jsoncpp`的集成测试.
+
+首先, 在顶层`CMakeLists.txt`中定义了`JSONCPP_WITH_TESTS`功能开关, 并设置成开启
+
+```cmake
+# 编译并（针对 jsoncpp_check）运行 JsonCpp 测试可执行文件的选项
+option(JSONCPP_WITH_TESTS "Compile and (for jsoncpp_check) run JsonCpp test executables" ON)
+```
+
+同时, 顶层文件中也使用该功能开关判断是否启用测试模块
+
+```cmake
+# 若启用了编译并运行测试的选项
+if(JSONCPP_WITH_TESTS)
+    # 启用测试功能
+    enable_testing()
+    include(CTest)
+endif()
+```
+
+而在`src`目录下, 也会对该功能开关进行检查, 如果开启, 则将添加两个测试子目录
+
+```cmake
+# 添加 lib_json 子目录到构建过程中
+# 这会执行 lib_json 目录下的 CMakeLists.txt 文件，构建该目录下的代码
+add_subdirectory(lib_json)
+
+# 检查是否启用了编译并运行测试的选项
+if(JSONCPP_WITH_TESTS)
+    # 若启用了测试选项，添加 jsontestrunner 子目录到构建过程中
+    # 这会执行 jsontestrunner 目录下的 CMakeLists.txt 文件，构建测试运行器相关代码
+    add_subdirectory(jsontestrunner)
+    # 添加 test_lib_json 子目录到构建过程中
+    # 这会执行 test_lib_json 目录下的 CMakeLists.txt 文件，构建针对 lib_json 的测试代码
+    add_subdirectory(test_lib_json)
+endif()
+
+```
+
+其中, `jsontestrunner`是一个黑箱测试, 它将读取`json`文件到内存当中, 进行序列化和反序列化操作, 并判断是否符合预期;  `test_lib_json`则是后来新加的白箱测试, 主要是对`jsoncpp`中的`API`进行针对测试. 我们主要看`test_lib_json`
+
+在`test_lib_json`中, 则定义了具体的测试内容
+
+![image-20250919093100885](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250919093100885.png)
+
+在末尾, 我们可以看到一个常见的有关测试的做法, 那就是构建完成后自动测试, 而不需要进行手动测试
+
+```cmake
+# 在构建后运行单元测试
+# （默认的 CMake 工作流程会将测试结果隐藏在文件中，导致开发体验不佳）
+if(JSONCPP_WITH_POST_BUILD_UNITTEST)
+    # 为 jsoncpp_test 目标添加一个构建后命令
+    add_custom_command(TARGET jsoncpp_test
+        POST_BUILD
+        # 构建后执行的命令为使用交叉编译模拟器（若有）运行 jsoncpp_test 可执行文件
+        COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:jsoncpp_test>
+    )
+endif()
+
+```
+
+它依据功能开关`JSONCPP_WITH_POST_BUILD_UNITTEST`, 决定是否在目标`jsoncpp_test`(也就是它自己)构建完成后, 自动进行测试, `${CMAKE_CROSSCOMPILING_EMULATOR}`和交叉编译有关, `$<TARGET_FILE:jsoncpp_test>`则是一个生成器表达式, 描述了测试程序的位置, 
+
+```shell
+[wind@Ubuntu build]$ cmake --build .
+[  5%] Building CXX object src/lib_json/CMakeFiles/jsoncpp_lib.dir/json_reader.cpp.o
+[ 11%] Building CXX object src/lib_json/CMakeFiles/jsoncpp_lib.dir/json_value.cpp.o
+[ 17%] Building CXX object src/lib_json/CMakeFiles/jsoncpp_lib.dir/json_writer.cpp.o
+[ 23%] Linking CXX shared library ../../lib/libjsoncpp.so
+[ 23%] Built target jsoncpp_lib
+[ 29%] Building CXX object src/lib_json/CMakeFiles/jsoncpp_static.dir/json_reader.cpp.o
+[ 35%] Building CXX object src/lib_json/CMakeFiles/jsoncpp_static.dir/json_value.cpp.o
+[ 41%] Building CXX object src/lib_json/CMakeFiles/jsoncpp_static.dir/json_writer.cpp.o
+[ 47%] Linking CXX static library ../../lib/libjsoncpp.a
+[ 47%] Built target jsoncpp_static
+[ 52%] Building CXX object src/lib_json/CMakeFiles/jsoncpp_object.dir/json_reader.cpp.o
+[ 58%] Building CXX object src/lib_json/CMakeFiles/jsoncpp_object.dir/json_value.cpp.o
+[ 64%] Building CXX object src/lib_json/CMakeFiles/jsoncpp_object.dir/json_writer.cpp.o
+[ 64%] Built target jsoncpp_object
+[ 70%] Building CXX object src/jsontestrunner/CMakeFiles/jsontestrunner_exe.dir/main.cpp.o
+[ 76%] Linking CXX executable ../../bin/jsontestrunner_exe
+[ 76%] Built target jsontestrunner_exe
+[ 82%] Building CXX object src/test_lib_json/CMakeFiles/jsoncpp_test.dir/jsontest.cpp.o
+[ 88%] Building CXX object src/test_lib_json/CMakeFiles/jsoncpp_test.dir/fuzz.cpp.o
+[ 94%] Building CXX object src/test_lib_json/CMakeFiles/jsoncpp_test.dir/main.cpp.o
+[100%] Linking CXX executable ../../bin/jsoncpp_test
+Testing ValueTest/checkNormalizeFloatingPointStr: OK
+Testing ValueTest/memberCount: OK
+Testing ValueTest/objects: OK
+Testing ValueTest/arrays: OK
+Testing ValueTest/resizeArray: OK
+Testing ValueTest/resizePopulatesAllMissingElements: OK
+Testing ValueTest/getArrayValue: OK
+Testing ValueTest/arrayIssue252: OK
+Testing ValueTest/arrayInsertAtRandomIndex: OK
+Testing ValueTest/null: OK
+Testing ValueTest/strings: OK
+Testing ValueTest/bools: OK
+Testing ValueTest/integers: OK
+Testing ValueTest/nonIntegers: OK
+Testing ValueTest/compareNull: OK
+Testing ValueTest/compareInt: OK
+Testing ValueTest/compareUInt: OK
+Testing ValueTest/compareDouble: OK
+Testing ValueTest/compareString: OK
+Testing ValueTest/compareBoolean: OK
+Testing ValueTest/compareArray: OK
+Testing ValueTest/compareObject: OK
+Testing ValueTest/compareType: OK
+Testing ValueTest/CopyObject: OK
+Testing ValueTest/typeChecksThrowExceptions: OK
+Testing ValueTest/offsetAccessors: OK
+Testing ValueTest/StaticString: OK
+Testing ValueTest/WideString: OK
+Testing ValueTest/CommentBefore: OK
+Testing ValueTest/zeroes: OK
+Testing ValueTest/zeroesInKeys: OK
+Testing ValueTest/specialFloats: OK
+Testing ValueTest/precision: OK
+Testing ValueTest/searchValueByPath: OK
+Testing FastWriterTest/dropNullPlaceholders: OK
+Testing FastWriterTest/enableYAMLCompatibility: OK
+Testing FastWriterTest/omitEndingLineFeed: OK
+Testing FastWriterTest/writeNumericValue: OK
+Testing FastWriterTest/writeArrays: OK
+Testing FastWriterTest/writeNestedObjects: OK
+Testing StyledWriterTest/writeNumericValue: OK
+Testing StyledWriterTest/writeArrays: OK
+Testing StyledWriterTest/writeNestedObjects: OK
+Testing StyledWriterTest/multiLineArray: OK
+Testing StyledWriterTest/writeValueWithComment: OK
+Testing StyledStreamWriterTest/writeNumericValue: OK
+Testing StyledStreamWriterTest/writeArrays: OK
+Testing StyledStreamWriterTest/writeNestedObjects: OK
+Testing StyledStreamWriterTest/multiLineArray: OK
+Testing StyledStreamWriterTest/writeValueWithComment: OK
+Testing StreamWriterTest/writeNumericValue: OK
+Testing StreamWriterTest/writeArrays: OK
+Testing StreamWriterTest/writeNestedObjects: OK
+Testing StreamWriterTest/multiLineArray: OK
+Testing StreamWriterTest/dropNullPlaceholders: OK
+Testing StreamWriterTest/enableYAMLCompatibility: OK
+Testing StreamWriterTest/indentation: OK
+Testing StreamWriterTest/writeZeroes: OK
+Testing StreamWriterTest/unicode: OK
+Testing StreamWriterTest/escapeControlCharacters: OK
+Testing ReaderTest/parseWithNoErrors: OK
+Testing ReaderTest/parseObject: OK
+Testing ReaderTest/parseArray: OK
+Testing ReaderTest/parseString: OK
+Testing ReaderTest/parseComment: OK
+Testing ReaderTest/streamParseWithNoErrors: OK
+Testing ReaderTest/parseWithNoErrorsTestingOffsets: OK
+Testing ReaderTest/parseWithOneError: OK
+Testing ReaderTest/parseSpecialFloat: OK
+Testing ReaderTest/strictModeParseNumber: OK
+Testing ReaderTest/parseChineseWithOneError: OK
+Testing ReaderTest/parseWithDetailError: OK
+Testing ReaderTest/pushErrorTest: OK
+Testing ReaderTest/allowNumericKeysTest: OK
+Testing CharReaderTest/parseWithNoErrors: OK
+Testing CharReaderTest/parseWithNoErrorsTestingOffsets: OK
+Testing CharReaderTest/parseNumber: OK
+Testing CharReaderTest/parseString: OK
+Testing CharReaderTest/parseComment: OK
+Testing CharReaderTest/parseObjectWithErrors: OK
+Testing CharReaderTest/parseArrayWithErrors: OK
+Testing CharReaderTest/parseWithOneError: OK
+Testing CharReaderTest/parseChineseWithOneError: OK
+Testing CharReaderTest/parseWithDetailError: OK
+Testing CharReaderTest/parseWithStackLimit: OK
+Testing CharReaderTest/testOperator: OK
+Testing CharReaderStrictModeTest/dupKeys: OK
+Testing CharReaderFailIfExtraTest/issue164: OK
+Testing CharReaderFailIfExtraTest/issue107: OK
+Testing CharReaderFailIfExtraTest/commentAfterObject: OK
+Testing CharReaderFailIfExtraTest/commentAfterArray: OK
+Testing CharReaderFailIfExtraTest/commentAfterBool: OK
+Testing CharReaderFailIfExtraTest/parseComment: OK
+Testing CharReaderAllowDropNullTest/issue178: OK
+Testing CharReaderAllowNumericKeysTest/allowNumericKeys: OK
+Testing CharReaderAllowSingleQuotesTest/issue182: OK
+Testing CharReaderAllowZeroesTest/issue176: OK
+Testing CharReaderAllowSpecialFloatsTest/specialFloat: OK
+Testing CharReaderAllowSpecialFloatsTest/issue209: OK
+Testing EscapeSequenceTest/readerParseEscapeSequence: OK
+Testing EscapeSequenceTest/charReaderParseEscapeSequence: OK
+Testing EscapeSequenceTest/writeEscapeSequence: OK
+Testing BuilderTest/settings: OK
+Testing BomTest/skipBom: OK
+Testing BomTest/notSkipBom: OK
+Testing IteratorTest/convert: OK
+Testing IteratorTest/decrement: OK
+Testing IteratorTest/reverseIterator: OK
+Testing IteratorTest/distance: OK
+Testing IteratorTest/nullValues: OK
+Testing IteratorTest/staticStringKey: OK
+Testing IteratorTest/names: OK
+Testing IteratorTest/indexes: OK
+Testing IteratorTest/constness: OK
+Testing RValueTest/moveConstruction: OK
+Testing FuzzTest/fuzzDoesntCrash: OK
+Testing ParseWithStructuredErrorsTest/success: OK
+Testing ParseWithStructuredErrorsTest/singleError: OK
+Testing MemberTemplateAs/BehavesSameAsNamedAs: OK
+Testing MemberTemplateIs/BehavesSameAsNamedIs: OK
+Testing VersionTest/VersionNumbersMatch: OK
+All 121 tests passed
+[100%] Built target jsoncpp_test
+[wind@Ubuntu build]$ ctest
+Test project /home/wind/jsoncpp/build
+    Start 1: jsoncpp_readerwriter
+1/3 Test #1: jsoncpp_readerwriter ................   Passed    2.07 sec
+    Start 2: jsoncpp_readerwriter_json_checker
+2/3 Test #2: jsoncpp_readerwriter_json_checker ...   Passed    2.70 sec
+    Start 3: jsoncpp_test
+3/3 Test #3: jsoncpp_test ........................   Passed    0.01 sec
+
+100% tests passed, 0 tests failed out of 3
+
+Total Test time (real) =   4.79 sec
+[wind@Ubuntu build]$ 
+```
+
+我们看到, 在`Linking CXX executable ../../bin/jsoncpp_test`, 就自动进行测试, 当然你也可以手动测试, 但测试信息没有自动测试更详细.
+
+------
+
+接下来我们以`jsoncpp`为例, 演示, `cmake`包管理的一些细节. 
+
+在`cmake`中, 有一个`pkg-config`模块, 他会将使用`cmake --install .`安装的库的安装信息, 以编译器选项的形式直观明了地提供给用户. 我们之前说的, `CMake Config`(比如`jsoncppConfig.cmake jsoncpp-targets.cmake jsoncpp-namespaced-targets.cmake jsoncpp-targets-release.cmake`), 则关注与基于`cmake`自身的封装接口.
+
+又或者这样说, `pkg-config`的工作场景是极简环境下的项目构建, 极简到只有编译器和底层生成器甚至都没有生成器只有编译器的场景, 它的特点是极简, 轻量化, 不依赖`cmake`这个工具, 是用来"外循环"用的, 而`CMake Config`则要基于`cmake`工具, 它为使用`cmake`安装库的封装接口, 和用`cmake`会用上述那些库的项目, 提供一个标准的, 统一的封装接口, 是用来"内循环"的.
+
+在我们安装`jsoncpp`后, 会发现, 它给我们安装了一个`.pc`文件, 这里面就存储着`jsoncpp`的库信息, 并以编译选项的形式直接呈现在我们眼前, 由于它的轻便简短, 又是我们也把`.pc`叫做库的明信片.
+
+```shell
+[wind@Ubuntu build]$ sudo cmake --install .
+[sudo] password for wind: 
+-- Install configuration: "Release"
+-- Installing: /usr/local/lib/pkgconfig/jsoncpp.pc
+-- Installing: /usr/local/lib/cmake/jsoncpp/jsoncpp-targets.cmake
+-- Installing: /usr/local/lib/cmake/jsoncpp/jsoncpp-targets-release.cmake
+-- Installing: /usr/local/lib/cmake/jsoncpp/jsoncppConfigVersion.cmake
+-- Installing: /usr/local/lib/cmake/jsoncpp/jsoncppConfig.cmake
+-- Installing: /usr/local/lib/cmake/jsoncpp/jsoncpp-namespaced-targets.cmake
+-- Installing: /usr/local/lib/libjsoncpp.so.1.9.7
+-- Up-to-date: /usr/local/lib/libjsoncpp.so.27
+-- Up-to-date: /usr/local/lib/libjsoncpp.so
+-- Installing: /usr/local/lib/libjsoncpp.a
+-- Installing: /usr/local/lib/objects-Release/jsoncpp_object/json_reader.cpp.o
+-- Installing: /usr/local/lib/objects-Release/jsoncpp_object/json_value.cpp.o
+-- Installing: /usr/local/lib/objects-Release/jsoncpp_object/json_writer.cpp.o
+-- Installing: /usr/local/include/json/allocator.h
+-- Installing: /usr/local/include/json/assertions.h
+-- Installing: /usr/local/include/json/config.h
+-- Installing: /usr/local/include/json/forwards.h
+-- Installing: /usr/local/include/json/json.h
+-- Installing: /usr/local/include/json/json_features.h
+-- Installing: /usr/local/include/json/reader.h
+-- Installing: /usr/local/include/json/value.h
+-- Installing: /usr/local/include/json/version.h
+-- Installing: /usr/local/include/json/writer.h
+[wind@Ubuntu build]$ 
+```
+
+那接下来我们就看一下这`jsoncpp.pc`写了什么
+
+```pc
+prefix=/usr/local
+exec_prefix=/usr/local
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: jsoncpp
+Description: A C++ library for interacting with JSON
+Version: 1.9.7
+URL: https://github.com/open-source-parsers/jsoncpp
+Libs: -L${libdir} -ljsoncpp
+Cflags: -I${includedir}
+
+```
+
+我们看到非常简短, 不过它并不是直接提供了编译器选项, 毕竟各个平台可能有各自的不同, 所以提供的事类似于模版的东西, 如果要使用它, 可以把这个文件交给`pkg-config`这个命令行工具来解析, 获得具体的编译选项.
+
+```shell
+[wind@Ubuntu build]$ pkg-config --cflags --libs jsoncpp
+-I/usr/local/include -L/usr/local/lib -ljsoncpp 
+```
+
+`--cflags`是要求解析出头文件包含选项, `--libs`是要求解析出库文件链接选项, 这样的话, 我们就可以直接用编译器以命令行形式一步到位.
+
+接下来, 我们拷贝之前的`find_jsoncpp_config`来进行演示
+
+```shell
+[wind@Ubuntu pkg_config_json]$ pkg-config --cflags --libs jsoncpp
+-I/usr/local/include -L/usr/local/lib -ljsoncpp 
+[wind@Ubuntu pkg_config_json]$ clang++ main.cpp -std=c++11 -I/usr/local/include -L/usr/local/lib -ljsoncpp -o main
+[wind@Ubuntu pkg_config_json]$ ./main
+root: 
+{
+        "age" : 18,
+        "name" : "whisper"
+}
+[wind@Ubuntu pkg_config_json]$ 
+```
+
+注意要使用C++11, 之前我们说过的, 有版本兼容问题. 当然你用`g++`也是可以的
+
+还有一种一步到位的写法
+
+```shell
+[wind@Ubuntu pkg_config_json]$ rm main
+[wind@Ubuntu pkg_config_json]$ g++ main.cpp -std=c++11 $(pkg-config --cflags --libs jsoncpp) -o main
+[wind@Ubuntu pkg_config_json]$ ./main
+root: 
+{
+        "age" : 18,
+        "name" : "whisper"
+}
+[wind@Ubuntu pkg_config_json]$ 
+```
+
+又或者, 我们也可以用`cmake`脚本来使用它
+
+```cmake
+cmake_minimum_required(VERSION 3.18)
+
+project(pkg_confif_json LANGUAGES CXX)
+
+# 设置 C++ 标准
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# 1. 引入 cmake 中的PkgConfig模块
+find_package(PkgConfig REQUIRED)
+
+# 2. 让 pkg-config 搜索 jsoncpp.pc，并⽣成 IMPORTED 目标
+#    - JSONCPP     : 这是前缀，用来生成一系列变量 (JSONCPP_INCLUDE_DIRS、…)
+#    - REQUIRED    : 找不到就报错并停止配置
+#    - IMPORTED_TARGET : 额外创建 PkgConfig::JSONCPP 目标（推荐用法）
+pkg_check_modules(JSONCPP REQUIRED IMPORTED_TARGET jsoncpp)
+
+# 3. 添加你的可执行文件 / 库
+add_executable(main main.cpp)
+
+# 4. 通过导入目标 PkgConfig::JSONCPP，把所有使用需求一次性传播进来
+target_link_libraries(main PRIVATE PkgConfig::JSONCPP)
+
+# 可选：查看自动填充的属性（调试用）
+# 读取 PkgConfig::JSONCPP 头文件路径 INTERFACE_INCLUDE_DIRECTORIES
+get_target_property(_incs PkgConfig::JSONCPP INTERFACE_INCLUDE_DIRECTORIES)
+message(STATUS "jsoncpp include dirs = ${_incs}")
+```
+
+```shell
+[wind@Ubuntu pkg_config_json]$ mkdir build && cd build
+[wind@Ubuntu build]$ cmake ..
+-- The CXX compiler identification is Clang 18.1.3
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/clang++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found PkgConfig: /usr/bin/pkg-config (found version "1.8.1") 
+-- Checking for module 'jsoncpp'
+--   Found jsoncpp, version 1.9.7
+-- jsoncpp include dirs = /usr/local/include
+-- Configuring done (1.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/wind/cmakeClass/pkg_config_json/build
+[wind@Ubuntu build]$ cmake --build .
+[ 50%] Building CXX object CMakeFiles/main.dir/main.cpp.o
+[100%] Linking CXX executable main
+[100%] Built target main
+[wind@Ubuntu build]$ ./main
+root: 
+{
+        "age" : 18,
+        "name" : "whisper"
+}
+[wind@Ubuntu build]$ 
+```
+
 
 
 # 完
