@@ -6383,6 +6383,222 @@ root:
 [wind@Ubuntu build]$ 
 ```
 
+----
+
+下面我们谈谈头文件的安装发布, 以`jsoncpp`为例
+
+我们还是像之前那样, 先谈谈与之相关的函数, 然后以之为引子, 去看看`jsoncpp`具体是怎么做的.
+
+首先是`file`这个函数, 该函数可以从指定目录下进行文件检索, 将符合要求的文件加入文件列表, 等待后续处理
+
+```cmake
+file(GLOB|GLOB_RECURST <FileLists> [LIST_DIRECTORIES true|false]
+	[RELATIVE <path>] CONFIGURE_DEPENDS <globbing-expressions>
+)
+```
+
+`GLOB|GLOB_RECURST`表示是否进行递归式的目录搜索, `GLOB`表示仅在当前目录搜索, `GLOB_RECURST`表示以当前目录为基准, 继续向下搜索, 一般情况下我们选`GLOB`, 因为它不破坏目录结构; `FileLists`是文件列表, 或者说是一个变量, `LIST_DIRECTORIES true|false`表示是否把目录也考虑进来, 有时候, 我们的头文件可能是由很多子目录构成的, 如果我们想要让他们以源代码中的目录结构安装到系统中, 此时需要的就不是安装普通的文件, 而是安装目录这种文件, 此时我们就可以让`LIST_DIRECTORIES `为`true`, 这样它就会普通文件, 目录一块检索, 如果你选择`flase`的话, 它就会把子文件夹忽略, 即使符合后面的匹配规则也不会收集, 当然, 我是建立在选择`GLOB`的情况下才讨论`LIST_DIRECTORIES`选`true`还是`false`的; `RELATIVE <path>`是相对目录; `CONFIGURE_DEPENDS`表示是否每次配置都再进行一遍检查, 以确定是否添加了新的符合规则的文件; `globbing-expression`是匹配规则.
+
+`install`就是把各种东西安装到系统中, 比如目标, 文件, 目录, 导出文件
+
+```cmake
+install(FILES <files>...
+    DESTINATION <dir>
+    [PERMISSIONS <permissions>...]
+    [CONFIGURATIONS <configs>...]
+    [COMPONENT <component>]
+)
+
+install(DIRECTORY <dirs>...
+    DESTINATION <dir>
+    [FILE_PERMISSIONS <permissions>...]
+    [DIRECTORY_PERMISSIONS <permissions>...]
+)
+
+```
+
+你收集的事什么文件, 自然就用什么安装, 收集的是普通文件, 就用文件, 收集的是目录, 就用目录, 对于导出集合我们之前说过, 是要在目标里定义描述的.
+
+我们查看`jsoncpp`源码树的`include`, 可以看到, 头文件实际上都放在同名项目的子文件下
+
+```shell
+[wind@Ubuntu include]$ tree .
+.
+├── CMakeLists.txt
+├── json
+│   ├── allocator.h
+│   ├── assertions.h
+│   ├── config.h
+│   ├── forwards.h
+│   ├── json_features.h
+│   ├── json.h
+│   ├── reader.h
+│   ├── value.h
+│   ├── version.h
+│   └── writer.h
+├── PreventInBuildInstalls.cmake
+└── PreventInSourceBuilds.cmake
+
+2 directories, 13 files
+[wind@Ubuntu include]$ 
+```
+
+这是一种常见做法, 这样做的好处就是, 安装之前, 包含头文件是`json/...`, 安装之后, 由于头文件还是安装到`CMAKE_INSTALL_INCLUDEDIR/json`下面, 所以安装后头文件还是`json/...`, 这样就保证了安装前后的头文件相对路径统一.
+
+```shell
+[wind@Ubuntu jsoncpp]$ ls /usr/local/include/json
+allocator.h  assertions.h  config.h  forwards.h  json_features.h  json.h  reader.h  value.h  version.h  writer.h
+```
+
+`jsoncpp`是以文件安装头文件的, 我们可以搜索`install(FILES`来查找, 当然, 既然你也可以直接看`include`下的`CMakeLists.txt`
+
+```cmake
+# 使用 file(GLOB) 命令查找当前目录下 json 子目录中所有以 .h 结尾的文件
+# 并将这些文件的路径存储在变量 INCLUDE_FILES 中
+# 注意：虽然 GLOB 方便，但在某些情况下（如文件新增或删除）可能不会自动更新，需留意
+file(GLOB INCLUDE_FILES "json/*.h")
+
+# 使用 install 命令将查找到的头文件安装到指定目录
+# FILES 关键字指定要安装的文件列表，这里使用之前存储在 INCLUDE_FILES 变量中的文件路径
+# DESTINATION 关键字指定安装的目标目录，使用 CMAKE_INSTALL_INCLUDEDIR 变量获取系统标准的包含目录，
+# 并在其后添加 /json 子目录。默认为：usr/local/include/
+install(FILES
+    ${INCLUDE_FILES}
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/json)  # 结果为：usr/local/include/json
+
+
+```
+
+----
+
+接下来我们结合`jsoncpp`本身, 来看看它如何借助`cmake`生成并安装`.pc`文件.
+
+我们搜索`pkg-config`
+
+```cmake
+# 若启用了生成并安装 .pc 文件的选项
+if(JSONCPP_WITH_PKGCONFIG_SUPPORT)
+    include(JoinPaths)
+
+    # 拼接 pkg-config 文件所需的库目录路径
+    join_paths(libdir_for_pc_file "\${exec_prefix}" "${CMAKE_INSTALL_LIBDIR}")
+    # 拼接 pkg-config 文件所需的包含目录路径
+    join_paths(includedir_for_pc_file "\${prefix}" "${CMAKE_INSTALL_INCLUDEDIR}")
+
+    # 配置 pkg-config 文件
+    configure_file(
+        "pkg-config/jsoncpp.pc.in"
+        "pkg-config/jsoncpp.pc"
+        @ONLY)
+    # 安装生成的 pkg-config 文件
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/pkg-config/jsoncpp.pc"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+endif()
+```
+
+首先, 它包含了一个`JoinPaths`模块, 这是`cmake`在`3.20`之后新添加的一个模块, 其中提供了`join_paths`用于进行路径拼接,; 而在`join_paths`中, 就会拼出`${exec_prefix}/lib, ${prefix}/include`这两个路径('\\'表示不转义, 也就是照抄), 并把它们赋给`libdir_for_pc_file`和`includedir_for_pc_file`这两个变量; `configure_file`则是一个模版生成函数, 可以将输入文件`jsoncpp.pc.in`作为模版生成对应的文件`jsoncpp.pc`, `@ONLY`表示对输入文件中的`@VAR@`进行转义
+
+输入
+
+```pc.in
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=@CMAKE_INSTALL_PREFIX@
+libdir=@libdir_for_pc_file@
+includedir=@includedir_for_pc_file@
+
+Name: jsoncpp
+Description: A C++ library for interacting with JSON
+Version: @PROJECT_VERSION@
+URL: https://github.com/open-source-parsers/jsoncpp
+Libs: -L${libdir} -ljsoncpp
+Cflags: -I${includedir}
+
+```
+
+输出
+
+```pc
+prefix=/usr/local
+exec_prefix=/usr/local
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: jsoncpp
+Description: A C++ library for interacting with JSON
+Version: 1.9.7
+URL: https://github.com/open-source-parsers/jsoncpp
+Libs: -L${libdir} -ljsoncpp
+Cflags: -I${includedir}
+```
+
+对于如何使用`.pc`恩建, 我们之前其实已经讲过了, 要么使用`pkg-config`直接解析, 要么是调用`cmake pkg-config`模块解析`.pc`文件, 具体怎么用可以去上面找, 这里不说了.
+
+----
+
+接下来是安装目标和导出集合
+
+首先还是安装
+
+```cmake
+
+install(TARGETS <targets>...
+    [EXPORT <export-name>]
+    [RUNTIME DESTINATION <dir>]   
+    [LIBRARY DESTINATION <dir>]    
+    [ARCHIVE DESTINATION <dir>]    
+    [INCLUDES DESTINATION <dir>]   
+)
+
+install(EXPORT <export-name>
+    DESTINATION <dir>
+    [NAMESPACE <namespace>::]
+    [FILE <filename>]
+)
+```
+
+就像我们之前说的, 导出集合的那些配置文件`Config.cmake`记录了库文件具体安装在何处, 因此在安装目标时, 需要定义导出集合, 追踪目标的安装位置,  接下来再通过安装导出集合把它们真的安装到系统中去
+
+```cmake
+# 若启用了生成并安装 CMake 包文件的选项
+if(JSONCPP_WITH_CMAKE_PACKAGE)
+    include(CMakePackageConfigHelpers)
+    # 安装导出的目标
+    install(EXPORT jsoncpp
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/jsoncpp
+        FILE        jsoncpp-targets.cmake)
+    # 配置 CMake 包配置文件
+    configure_package_config_file(jsoncppConfig.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/jsoncppConfig.cmake
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/jsoncpp)
+
+    # 编写基本的包版本文件
+    write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/jsoncppConfigVersion.cmake"
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion)
+    # 安装生成的 CMake 包文件
+    install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/jsoncppConfigVersion.cmake ${CMAKE_CURRENT_BINARY_DIR}/jsoncppConfig.cmake
+        ${CMAKE_CURRENT_SOURCE_DIR}/jsoncpp-namespaced-targets.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/jsoncpp)
+endif()
+```
+
+`configure_package_config_file`是依据输入文件模版生成并安装`jsoncppConfig.cmake`, `write_basic_package_version_file`是通过比较版本号来检查API是否兼容, 版本号的变动是依据API兼容性来进行的, 主版本号改变意味着破坏向后兼容, 次版本号改变意味着保持向后兼容，但新增功能, 修订号改变意味着向后兼容的 bug 修复, 所以光看版本号就可以判断版本兼容性.
+
+```cmae.in
+cmake_policy(PUSH)
+cmake_policy(VERSION 3.0...3.26)
+
+@PACKAGE_INIT@
+
+include ( "${CMAKE_CURRENT_LIST_DIR}/jsoncpp-targets.cmake" )
+include ( "${CMAKE_CURRENT_LIST_DIR}/jsoncpp-namespaced-targets.cmake" )
+
+check_required_components(JsonCpp)
+
+cmake_policy(POP)
+
+```
+
 
 
 # 完
