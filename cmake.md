@@ -6535,9 +6535,7 @@ Cflags: -I${includedir}
 
 ----
 
-接下来是安装目标和导出集合
-
-首先还是安装
+接下来是安装导出集合
 
 ```cmake
 
@@ -6598,6 +6596,161 @@ check_required_components(JsonCpp)
 cmake_policy(POP)
 
 ```
+
+安装目标
+
+目标在哪里安装? 我们可以通过`install(TARGETS`来搜索到, 它位于源码文件, 也就是`src/lib_json`路径下, 最终的安装指令是这样的
+
+```cmake
+# 安装目标
+install(TARGETS ${CMAKE_TARGETS} ${INSTALL_EXPORT}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}  # 可执行文件安装目录
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}  # 共享库安装目录
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}  # 静态库安装目录
+    OBJECTS DESTINATION ${CMAKE_INSTALL_LIBDIR}  # 对象文件安装目录
+)
+
+```
+
+后面四个安装位置就不说了, 我们主要看`CMAKE_TARGETS`和`INSTALL_EXPORT`这两个变量. 首先搜索`CMAKE_TARGETS`, 我们发现, 这是一个位于本脚本的列表变量, 正如它的字面意思, 它是记录, 所有目标的列表
+
+![image-20250921093431607](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250921093431607.png)
+
+![image-20250921093516844](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250921093516844.png)
+
+![](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250921093548411.png)
+
+如此, 如果三个功能开关都开启的话, 最终`CMAKE_TARGETS`就是`jsoncpp_lib;jsoncpp_static;jsoncpp_object`, 而在安装阶段, 这个目标列表将会展开.
+
+而对于`INSTALL_EXPORT`, 则也定义在同样的脚本下, 实际内容也是一个列表`EXPORT;jsoncpp`, 在`install`里又被展开
+
+```cmake
+# 安装此目标的相关指令
+if(JSONCPP_WITH_CMAKE_PACKAGE)
+    # 若启用了生成并安装 CMake 包文件的选项，设置导出目标
+    set(INSTALL_EXPORT EXPORT jsoncpp)
+else()
+    # 否则，清空导出目标设置
+    set(INSTALL_EXPORT)
+endif()
+```
+
+所以, 如果命令开关全部开启, 最终实际执行的就是
+
+```cmake
+# 安装目标
+install(TARGETS jsoncpp_lib jsoncpp_static jsoncpp_object EXPORT jsoncpp 
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}  # 可执行文件安装目录
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}  # 共享库安装目录
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}  # 静态库安装目录
+    OBJECTS DESTINATION ${CMAKE_INSTALL_LIBDIR}  # 对象文件安装目录
+)
+```
+
+而对于导出集合`jsoncpp`来说, 他将会在顶层`CMakeLists.txt`中被安装, 更严格的说, 是顶层`CMakeLists.txt`描述了导出集合的安装方法.
+
+![image-20250921095430711](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250921095430711.png)
+
+顶层`CMkakeLists.txt`则包含了子文件夹`src`, `src`下的脚本则包含了`src_libs`, `src_libs`下的脚本就是定义`EXPORT jsoncpp`的脚本. 
+
+我们看到, 它是先安装, 再包含的? 这有问题吗? 当然没有问题. 看上去是先安装再包含, 实际上, 脚本里的只是描述了`jsoncpp`的安装方式, `cmake`的解析器确实是从上往下读的, 但此时只相当于告诉`cmake`, 有一个`jsoncpp`的导出集合需要安装, `jsoncpp`就会记录下来, 但真正安装的时候, 可不是按照脚本的顺序来的, 而是按照依赖关系来的, 所以它会先安装目标, 再安装导出集合.
+
+不过他这里似乎没有将导出集合生成在构建树, 也就是
+
+```cmake
+export(EXPORT jsoncpp FILE ${CMAKE_CURRENT_BINARY_DIR}/jsoncpp-targets.cmake)
+```
+
+这种指令, 所以并没有构建树版本的`jsoncpp-targets.cmake`.
+
+而当用户以`CONFIG`模式使用`find_package()`, 就会将下面的脚本包含进用户的项目, 从而能够使用库
+
+```shell
+[wind@Ubuntu build]$ ls /usr/local/lib/cmake/jsoncpp -al
+total 32
+drwxr-xr-x 2 root root 4096 Sep 19 10:39 .
+drwxr-xr-x 5 root root 4096 Sep 10 08:44 ..
+-rw-r--r-- 1 root root 1124 Sep 19 10:05 jsoncppConfig.cmake
+-rw-r--r-- 1 root root 2762 Sep 19 10:05 jsoncppConfigVersion.cmake
+-rw-r--r-- 1 root root  431 Sep 17 10:38 jsoncpp-namespaced-targets.cmake
+-rw-r--r-- 1 root root 5951 Sep 19 10:05 jsoncpp-targets.cmake
+-rw-r--r-- 1 root root 2122 Sep 19 10:05 jsoncpp-targets-release.cmake
+[wind@Ubuntu build]$ 
+```
+
+------------
+
+下面, 我们换一个更大的项目来学习`cmake`, `curl`.
+
+`curl`, 即`Client URL`的缩写, 是一个功能强大的命令行工具和库, 用于通过URL语法在不同的网络协议下进行数据传输, 常用于http/https; FTP; 文件传输等场景, 支持超过30种协议, 和C, C++, Java, Python, GO, Node等多种语言.
+
+下面是我们所使用的, `cmake`指令经过注释的`curl`项目
+
+```shell
+git clone https://gitee.com/lizhengping189/curl.git
+```
+
+接下来我们就通过`curl`来查看如何实现和使用下面有关`cmake`的常见用法.
+
+- 变量定义
+- 功能开关选项
+- 集成测试选项
+- 安装头文件
+- 安装doc文档
+- 安装pkg-config对应的pc配置文件
+- 导出目标到构建目录
+- 安装静态库和动态库
+- 安装find_package的config模式的配置文件
+
+我们首先还是看变量, 主要看一般变量和缓存变量
+
+一般变量
+
+![image-20250921104742395](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250921104742395.png)
+
+缓存变量
+
+![image-20250921104955649](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250921104955649.png)
+
+我们看到, 对于缓存变量`ENABLE_IPV6`, 它是使用`FORCE`来进行定义初始化的, 这意味着, 这种缓存变量有着最高的优先级, 即使是`-Dname=val`也无法覆写.
+
+---
+
+接下来我们看看`foreach`
+
+![image-20250921111333045](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250921111333045.png)
+
+这段其实就是以手动的方式, 去获取`cmake`进行项目配置时命令行添加的缓存变量, 如果是用户以命令行形式添加的缓存变量, 其默认信息就是"No help, variable specified on the command line.", 此时就知道这个缓存变量是用户命令行定义的, 接下来, 再获取这些缓存变量的类型和内容, 以类似于`-DCMAKE_BUILD_TYPE:STRING="Release" -DENABLE_SSL:BOOL="ON"`的形式放到`_cmake_args`这个列表中, 随后, 再将列表中的内容写到`buildinfo.txt`文件(图中并没有体现), 这段内容其实和项目本身无关, 主要是为了复现当初构建时的场景, 以便于之后进行问题定位, 代码分析的功能. 注释说要放到最顶部, 这是因为通过查看帮助信息判断是否为命令行参数的这种方法并不完全有效, 只有在还未进行任何缓存变量操作(脚本)之前进行.
+
+![image-20250921114034471](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250921114034471.png)
+
+我们看到, 这段循环是在测试子文件夹的, 这实际上是一段测试内容, 其中的目标`${LIB_SELECTED}`其实就是动静态库目标,它的测试思路是这样的:
+
+先写一段使用 `curl API` 的测试代码，然后通过`cmake` 提供的目标属性获取头文件包含目录, 从而拼出完整的编译参数，最后在命令行下用编译器（预处理器/编译器）去尝试编译它，从而验证 `curl `在纯命令行环境下是否能被正确使用。
+
+接下来我们看看`list`函数
+
+![image-20250921115858647](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250921115858647.png)
+
+这两个系统对我们Linux来说很冷门, 这主要还是为了跨平台兼容
+
+排序
+
+![image-20250921120224200](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250921120224200.png)
+
+查找
+
+![image-20250921120326893](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250921120326893.png)
+
+`FIND`后面是列表名, `${_libdir_}`是查找项, `_libdir_index`是查找结果, 如果`_libdir_index`小于零, 说明没找到.
+
+删除重复项
+
+![image-20250921120646991](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250921120646991.png)
+
+删除指定项
+
+![image-20250921120929854](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250921120929854.png)
 
 
 
