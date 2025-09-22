@@ -6752,6 +6752,286 @@ git clone https://gitee.com/lizhengping189/curl.git
 
 ![image-20250921120929854](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250921120929854.png)
 
+----
 
+接下来我们看头文件安装
+
+不过, 在开始之前, 我们看到, `curl`默认是不生成静态库的, 如果我们想要它生成, 就可以携带`-DBUILD_STATIC_LIBS=ON`覆盖`option`
+
+![image-20250922083344648](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250922083344648.png)
+
+```shell
+mkdir build && cd build
+...
+cmake ../ -DBUILD_STATIC_LIBS=ON
+...
+cmake --build .
+...
+sudo cmake --install .
+...
+-- Up-to-date: /usr/local/include/curl
+-- Up-to-date: /usr/local/include/curl/urlapi.h
+-- Up-to-date: /usr/local/include/curl/typecheck-gcc.h
+-- Up-to-date: /usr/local/include/curl/easy.h
+-- Up-to-date: /usr/local/include/curl/websockets.h
+-- Up-to-date: /usr/local/include/curl/mprintf.h
+-- Up-to-date: /usr/local/include/curl/multi.h
+-- Up-to-date: /usr/local/include/curl/header.h
+-- Up-to-date: /usr/local/include/curl/options.h
+-- Up-to-date: /usr/local/include/curl/curlver.h
+-- Up-to-date: /usr/local/include/curl/system.h
+-- Up-to-date: /usr/local/include/curl/curl.h
+-- Up-to-date: /usr/local/include/curl/stdcheaders.h
+...
+```
+
+中间内容比较多, 所以省略了大多数内容, 我这里前缀是`Up-to-date`, 因为五之前已经安装过了, 这里的意思就是"已经最新, 无需更新".
+
+`curl`的源代码树头文件包含路径是这样的
+
+```shell
+[wind@Ubuntu include]$ tree .
+.
+├── curl
+│   ├── curl.h
+│   ├── curlver.h
+│   ├── easy.h
+│   ├── header.h
+│   ├── Makefile.am
+│   ├── mprintf.h
+│   ├── multi.h
+│   ├── options.h
+│   ├── stdcheaders.h
+│   ├── system.h
+│   ├── typecheck-gcc.h
+│   ├── urlapi.h
+│   └── websockets.h
+├── Makefile.am
+└── README.md
+
+2 directories, 15 files
+```
+
+这种文件层次和之前我们看的`jsoncpp`是一样的, 不过, 对于头文件的安装, `curl`是直接拿目录进行安装的
+
+```cmake
+# 安装头文件
+  install(DIRECTORY "${PROJECT_SOURCE_DIR}/include/curl"
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h")
+```
+
+注意, 进行目录安装的时候, `curl`后面不要再加上`/`, `/`的意思是这个目录下的, 不带`/`就是带上目录本身, 这样写的话, 就会把`curl`目录, 以及`curl`目录下的`.h`文件安装到`CMAKE_INSTALL_INCLUDEDIR`中
+
+---
+
+下面我们说`cmake`对于`man`手册的安装.
+
+在学习Linux的时候, 我们就知道, 有一个`man`手册, 可以为我们提供关于Linux各类工具, 接口的使用帮助, 比如`man accept`
+
+![image-20250922092750260](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250922092750260.png)
+
+在Linux中, `man`手册将会以压缩文件的方式存放在`/usr/share/man/`目录层次中, 依据文档的描述内容被存放在对应的子文件下
+
+```shell
+[wind@Ubuntu include]$ ll /usr/share/man/
+total 464
+drwxr-xr-x  36 root root   4096 Apr 23  2024 ./
+drwxr-xr-x 136 root root   4096 Sep 17 12:13 ../
+drwxr-xr-x   5 root root   4096 Apr 23  2024 cs/
+drwxr-xr-x   5 root root   4096 Apr 23  2024 da/
+drwxr-xr-x   6 root root   4096 Apr 23  2024 de/
+drwxr-xr-x   5 root root   4096 Apr 23  2024 es/
+drwxr-xr-x   3 root root   4096 Apr 23  2024 fi/
+drwxr-xr-x   6 root root   4096 Jul 22 17:22 fr/
+drwxr-xr-x   3 root root   4096 Apr 23  2024 hr/
+drwxr-xr-x   5 root root   4096 Apr 23  2024 hu/
+drwxr-xr-x   5 root root   4096 Apr 23  2024 id/
+drwxr-xr-x   5 root root   4096 Apr 23  2024 it/
+drwxr-xr-x   5 root root   4096 Apr 23  2024 ja/
+drwxr-xr-x   5 root root   4096 Apr 23  2024 ko/
+drwxr-xr-x   2 root root  69632 Sep 20 06:12 man1/
+drwxr-xr-x   2 root root  28672 Jul 22 17:22 man2/
+drwxr-xr-x   2 root root 102400 Sep 17 12:13 man3/
+drwxr-xr-x   2 root root   4096 Jul 22 17:26 man4/
+drwxr-xr-x   2 root root  28672 Sep  7 08:58 man5/
+drwxr-xr-x   2 root root   4096 Apr 23  2024 man6/
+drwxr-xr-x   2 root root  36864 Sep  7 08:58 man7/
+drwxr-xr-x   2 root root  73728 Sep 20 06:12 man8/
+drwxr-xr-x   2 root root   4096 Jul 22 17:18 man9/
+drwxr-xr-x   6 root root   4096 Apr 23  2024 nl/
+drwxr-xr-x   6 root root   4096 Apr 23  2024 pl/
+drwxr-xr-x   6 root root   4096 Apr 23  2024 pt/
+drwxr-xr-x   5 root root   4096 Apr  9  2024 pt_BR/
+drwxr-xr-x   6 root root   4096 Apr 23  2024 ro/
+drwxr-xr-x   5 root root   4096 Apr 23  2024 ru/
+drwxr-xr-x   4 root root   4096 Apr 23  2024 sl/
+drwxr-xr-x   5 root root   4096 Apr 23  2024 sr/
+drwxr-xr-x   7 root root   4096 Jul 22 17:22 sv/
+drwxr-xr-x   5 root root   4096 Apr 23  2024 tr/
+drwxr-xr-x   6 root root   4096 Apr 23  2024 uk/
+drwxr-xr-x   5 root root   4096 Apr  9  2024 zh_CN/
+drwxr-xr-x   5 root root   4096 Apr 23  2024 zh_TW/
+[wind@Ubuntu include]$ 
+```
+
+| 章节  | 内容                                                         |
+| ----- | ------------------------------------------------------------ |
+| **1** | **用户命令（User Commands）**：平时终端里能运行的可执行程序。例如 `ls(1)`、`cp(1)`、`gcc(1)`。 |
+| **2** | **系统调用（System Calls）**：内核提供的接口函数，比如 `open(2)`、`read(2)`、`fork(2)`。 |
+| **3** | **库函数（Library Functions）**：C 库和其他库的函数接口。例如 `printf(3)`、`malloc(3)`、`curl_easy_init(3)`。 |
+| **4** | **特殊文件（Special Files）和设备（Devices）**：主要是 `/dev` 下的设备文件，以及相关驱动接口说明。例如 `null(4)`、`tty(4)`。 |
+| **5** | **文件格式（File Formats）和配置文件（Configurations）**：说明配置文件的语法和格式，比如 `passwd(5)`、`fstab(5)`、`crontab(5)`。 |
+| **6** | **游戏（Games）**：历史遗留的板块，收录小游戏和娱乐程序的手册页。例如 `fortune(6)`、`robots(6)`。现代系统很少用。 |
+| **7** | **杂项（Miscellaneous）**：各种协议、标准、惯例等，不直接属于命令或函数。例如 `man(7)`、`signal(7)`、`tcp(7)`、`regex(7)`。 |
+| **8** | **系统管理命令（System Administration Commands）**：管理员（root）专用命令。例如 `mount(8)`、`iptables(8)`、`systemctl(8)`。 |
+| **9** | **内核例程（Kernel Routines）**：专门给内核开发人员看的，描述内核级 API 和接口。例如 `request_irq(9)`。这部分不是所有 Linux 发行版都会安装。 |
+
+观察安装过程, 我们可以看到`curl`在`man3`里安装了很多文件
+
+![image-20250922093824896](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250922093824896.png)
+
+另外我们也安装了命令行工具`curl`, 所以也可以直接`man curl`
+
+![image-20250922094105080](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250922094105080.png)
+
+`cmake`对于`man`手册的部分安装命令如下
+
+```cmake
+# 调用函数，为 man_MANS 列表中的文件添加生成手册页的自定义命令
+curl_add_manual_pages(man_MANS)
+# 添加自定义目标 curl-man，ALL 表示该目标会在默认构建时执行
+# 依赖于 man_MANS 列表中的所有手册页文件
+add_custom_target(curl-man ALL DEPENDS ${man_MANS})
+# 检查是否禁用安装操作
+if(NOT CURL_DISABLE_INSTALL)
+  # 初始化安装源文件列表
+  set(_src "")
+  # 遍历 man_MANS 列表中的每个文件
+  foreach(_f IN LISTS man_MANS)
+    # 将生成的手册页文件路径添加到安装源文件列表中
+    list(APPEND _src "${CMAKE_CURRENT_BINARY_DIR}/${_f}")
+  endforeach()
+  # 将生成的手册页文件安装到指定的 man3 目录
+  install(FILES ${_src} DESTINATION "${CMAKE_INSTALL_MANDIR}/man3")
+  # 移除临时变量
+  unset(_src)
+endif()
+
+```
+
+我们看到, 它就是通过循环形式生成一个文件列表, 然后用`install`展开列表安装. 其中的`CMAKE_INSTALL_MANDIR`默认情况下就是`/usr/local/share/man`.
+
+`man`手册初始都是`markdown`文件, 然后`cmake`会通过自己的内置命令将其转化为`man`手册格式
+
+```shell
+[wind@Ubuntu docs]$ ls
+ALTSVC.md         cmdline-opts        DEPRECATE.md      FEATURES.md      HTTPSRR.md         IPFS.md            options-in-versions   SSLCERTS.md               VERSIONS.md
+BINDINGS.md       CODE_OF_CONDUCT.md  DISTROS.md        GOVERNANCE.md    INFRASTRUCTURE.md  KNOWN_BUGS         README.md             SSL-PROBLEMS.md           VULN-DISCLOSURE-POLICY.md
+BUG-BOUNTY.md     CODE_REVIEW.md      EARLY-RELEASE.md  HELP-US.md       INSTALL            libcurl            RELEASE-PROCEDURE.md  THANKS
+BUGS.md           CONTRIBUTE.md       ECH.md            HISTORY.md       INSTALL-CMAKE.md   MAIL-ETIQUETTE.md  ROADMAP.md            THANKS-filter
+CIPHERS.md        curl-config.md      examples          HSTS.md          INSTALL.md         Makefile.am        RUSTLS.md             TheArtOfHttpScripting.md
+CIPHERS-TLS12.md  CURL-DISABLE.md     EXPERIMENTAL.md   HTTP3.md         internals          MANUAL.md          SECURITY-ADVISORY.md  TODO
+CMakeLists.txt    CURLDOWN.md         FAQ               HTTP-COOKIES.md  INTERNALS.md       mk-ca-bundle.md    SPONSORS.md           URL-SYNTAX.md
+```
+
+---
+
+下面我们看看与`.pc`文件相关的相应内容
+
+```shell
+[wind@Ubuntu docs]$ pkg-config --cflags --libs libcurl
+-I/usr/local/include -L/usr/local/lib -lcurl 
+[wind@Ubuntu docs]$ pkg-config --cflags --libs libcurl --static
+-I/usr/local/include -DCURL_STATICLIB -L/usr/local/lib -lcurl -lidn2 -lcrypto -lbrotlicommon -lidn2 -lunistring -lssl -ldl -pthread -lcrypto -ldl -pthread -lz -lbrotlidec -lbrotlicommon -lzstd -pthread -lnghttp2 -lpsl 
+[wind@Ubuntu docs]$ 
+```
+
+这里的 `--static` 表示要做全静态链接。
+
+对于全静态链接来说，因为不会在运行时去依赖动态库，所以所有涉及到的库都必须在编译时一次性打进去。也就是说，不光是我们直接需要的 `curl`，它依赖的各种第三方库也要显式列出来交给 `ld`。这就是为什么后面跟了一长串选项。
+
+而动态链接的情况就不一样了。动态库本身记录了它的依赖关系，运行时由动态加载器负责解决。所以只要告诉 `ld` 去链接 `curl` 就行了，至于 `curl` 自己还需要哪些库，运行时它会自己处理。
+
+下面的内容就是`.pc`的生成及安装指令
+
+```cmake
+configure_file(
+    "${PROJECT_SOURCE_DIR}/libcurl.pc.in"
+    "${PROJECT_BINARY_DIR}/libcurl.pc" @ONLY)
+  # 安装生成的 libcurl.pc 文件
+  install(FILES "${PROJECT_BINARY_DIR}/libcurl.pc"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+
+```
+
+在`jsoncpp`我们已经介绍过了`configure_file`的功能, 它可以将一个输入文件经过一定的转换规则后生成一个输出文件, 在这里, 输入文件就是`libcurl.pc.in`, 输出文件就是`libcurl.pc`, 转换规则是`@ONLY`, 即依据`cmake`中的变量, 对输入文件中的`@val@`进行转换, 将其转换成变量的值
+
+```pc.in
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+supported_protocols="@SUPPORT_PROTOCOLS@"
+supported_features="@SUPPORT_FEATURES@"
+
+Name: libcurl
+URL: https://curl.se/
+Description: Library to transfer files with HTTP, FTP, etc.
+Version: @CURLVERSION@
+Requires: @LIBCURL_PC_REQUIRES@
+Requires.private: @LIBCURL_PC_REQUIRES_PRIVATE@
+Libs: -L${libdir} -lcurl @LIBCURL_PC_LIBS@
+Libs.private: @LIBCURL_PC_LDFLAGS_PRIVATE@ @LIBCURL_PC_LIBS_PRIVATE@
+Cflags: -I${includedir} @LIBCURL_PC_CFLAGS@
+Cflags.private: @LIBCURL_PC_CFLAGS_PRIVATE@
+
+```
+
+```pc
+prefix=/usr/local
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+supported_protocols="DICT FILE FTP FTPS GOPHER GOPHERS HTTP HTTPS IMAP IMAPS IPFS IPNS MQTT POP3 POP3S RTSP SMB SMBS SMTP SMTPS TELNET TFTP WS WSS"
+supported_features="alt-svc AsynchDNS brotli HSTS HTTP2 HTTPS-proxy IDN IPv6 Largefile libz NTLM PSL SSL threadsafe TLS-SRP UnixSockets zstd"
+
+Name: libcurl
+URL: https://curl.se/
+Description: Library to transfer files with HTTP, FTP, etc.
+Version: 8.13.0-DEV
+Requires: 
+Requires.private: libidn2,openssl,zlib,libbrotlidec,libbrotlicommon,libzstd,libnghttp2,libpsl
+Libs: -L${libdir} -lcurl 
+Libs.private:  -lidn2 -lssl -lcrypto -lz -lbrotlidec -lbrotlicommon -lzstd -lnghttp2 -lpsl
+Cflags: -I${includedir} 
+Cflags.private: -DCURL_STATICLIB
+
+```
+
+`prefix`即文件安装前缀, `exec_prefix`是可执行文件安装前缀, 一般来说, 这两个都是相同的路径, `curl`在这里正是这样做的, `@exec_prefix@`被替换成`${prefix}`, 这里的`${prefix}`会被`pkg-config`再进行替换, 
+
+如果不用`--static`, 打印的内容就是`Requires + Libs + Cflags`, 如果加上`--static`, 则会把`*.private`也给加上.
+
+---
+
+接下来看导出目标到构建目录, 之前在`jsoncpp`我们说过, 构建树里面也是可以有导出目标的, 如果使用`export`, 就可以把`curl-target.cmake`生成到构建树中, 这样做的好处是, 尽管目标并没有安装到系统路径中, 但在同一个项目中, 仍旧可以使用它们, 或者换种说法, 这些目标其实已经安装了--, 但并没有安装到系统目录中, 而是安装到了构建目录中.
+
+```cmake
+# 安装 curl 可执行文件
+install(TARGETS ${EXE_NAME} EXPORT ${TARGETS_EXPORT_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
+# 导出 curl 可执行文件目标到指定文件，并设置命名空间
+export(TARGETS ${EXE_NAME}
+  FILE "${PROJECT_BINARY_DIR}/curl-target.cmake"
+  NAMESPACE ${PROJECT_NAME}::
+)
+
+```
+
+我们的目录都是相对路径, 对于构建来说, 这些相对路径的基准当然就是构建目录
+
+![image-20250922114622394](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250922114622394.png)
+
+不过构建树下的`.pc`用的就是安装目录, 因为`.pc`是独立于`cmake`体系存在的, 它必须安装到系统目录中才有效, 所以不会有基于构建树的`.pc`文件.
 
 # 完
