@@ -7034,4 +7034,77 @@ export(TARGETS ${EXE_NAME}
 
 不过构建树下的`.pc`用的就是安装目录, 因为`.pc`是独立于`cmake`体系存在的, 它必须安装到系统目录中才有效, 所以不会有基于构建树的`.pc`文件.
 
+----
+
+接下来我们来看与导出集合相关的两种命令：`export(TARGETS …)` 和 `export(EXPORT …)`。
+ 它们背后的核心机制其实是一样的：由**使用方 (consumer)** 告诉 `cmake`，“这些目标需要被导出”，然后 `cmake` 自动追踪这些目标的属性，并写入到导出集合中。
+
+- 在 `export(TARGETS …)` 中，这种方式就是直接在命令后列出目标名。
+- 在 `export(EXPORT …)` 中，则是通过 `install` 阶段的 `EXPORT` 选项来告知 `cmake`，“这些目标要被追踪”。
+
+最初，`export` 的设计初衷仅仅是为了方便开发者在**不安装到系统的前提下**，就能在构建树里快速复用目标（因此 `export(TARGETS …)` 生成的文件不能直接安装到系统里）。
+ 于是有了 `export(TARGETS …)`：它会在构建树下生成一个 `Targets.cmake` 文件，让同一项目的不同部分可以共享目标。
+
+随着 `cmake` 的发展，人们逐渐意识到：导出集合放在安装树里也同样有价值。
+ 换句话说，完全可以不依赖 `.pc` 文件，而是由 `cmake` 自己维护一套目标共享机制。
+
+为了满足这一需求，`cmake` 引入了 `export(EXPORT …)` 和 `install(EXPORT)`：
+
+- `export(EXPORT …)`：把收集到的构建属性写到构建树。
+- `install(EXPORT …)`：把收集到的属性文件安装到安装树。
+
+这两者都依赖 `install(TARGETS … EXPORT …)`，因为目标只有在安装时才会被登记。而且 `cmake` 在安装时不仅会收集目标的**安装属性**，还会一并记录**构建属性**。
+
+自此，导出集合便同时拥有了**构建树阶段**和**安装树阶段**两套机制：
+
+- 构建树导出集合：方便开发过程中快速共享目标。
+- 安装树导出集合：让其他独立的 `cmake` 项目可以直接复用这些目标。
+
+因此，在现代项目中，推荐使用 `install(TARGETS … EXPORT …)`、`export(EXPORT …)` 与 `install(EXPORT …)` 这套更完善的模式。
+ 另外，就像在 `jsoncpp` 的 CMake 脚本中看到的那样，这三条指令在代码里并不要求严格的顺序，`cmake` 会自动理清依赖关系。
+
+那`curl`用什么呢? 它用的是旧模式
+
+```cmake
+# 导出目标到指定文件，并设置命名空间
+  export(TARGETS ${libcurl_export}
+    FILE "${PROJECT_BINARY_DIR}/libcurl-target.cmake"
+    NAMESPACE ${PROJECT_NAME}::
+  )
+```
+
+其中的`libcurl_export`其实就是目标列表
+
+![image-20250923094922929](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250923094922929.png)
+
+------
+
+接下来看看`curl`的动静态库安装
+
+首先我们还是到`/usr/local/lib/cmake`下去找`CURL`
+
+![image-20250923115142660](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250923115142660.png)
+
+当我们写下`find_package(CURL CONFIG)`后, `cmake`就会去寻找`CURLConfig.cmake`这个入口脚本
+
+![image-20250923115916424](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250923115916424.png)
+
+![image-20250923120304252](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250923120304252.png)
+
+这里和`jsoncpp`差不多.
+
+在`CURLTargets.cmake`里为项目导入了动态库(`CURL::libcurl_shared`)和静态库(`CURL::libcurl_static`), 并且默认使用`CURL::libcurl_shared`
+
+![image-20250923121149822](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250923121149822.png)
+
+模版文件是这样写的
+
+![image-20250923121659001](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250923121659001.png)
+
+而这里的`LIB_SELECTED`则优先选择动态库
+
+![image-20250923121838295](https://md-wind.oss-cn-nanjing.aliyuncs.com/image-20250923121838295.png)
+
+
+
 # 完
